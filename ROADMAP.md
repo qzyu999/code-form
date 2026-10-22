@@ -1,23 +1,26 @@
 # Roadmap
 
-This roadmap is exploratory. Prioritize validating the core model before expanding into autonomous code changes.
+This roadmap is exploratory. Validate the core model before expanding into autonomous code changes.
 
 ## Phase 0 — Define the model
 
-- [ ] Choose the first language and target repository type.
-- [ ] Define a versioned schema for components, interfaces, flows, claims, assumptions, invariants, evidence, and findings.
-- [ ] Define epistemic labels: observed, inferred, proposed, tested, proved, contradicted, unknown.
-- [ ] Specify evidence pointers using commit SHA plus file path and line/symbol range.
+- [x] Choose Python for the initial prototype.
+- [x] Define an initial versioned JSON analysis bundle.
+- [x] Anchor extracted evidence to file paths and line ranges where available, plus Git commit SHA when available.
 - [ ] Create a small hand-labeled evaluation repository.
 
 ## Phase 1 — Read-only repository analyzer
 
-- [ ] Capture repository identity, commit SHA, languages, dependencies, and test commands.
-- [ ] Extract imports, declarations, call edges where supported, routes/API endpoints, and test references.
-- [ ] Generate dependency graph and Mermaid diagrams.
-- [ ] Produce an evidence-linked claim ledger.
-- [ ] Identify untested public interfaces and documented-vs-implemented mismatches as *candidates*, not automatically confirmed defects.
-- [ ] Make output deterministic where possible and record model/tool versions.
+- [x] Capture repository identity, commit SHA, branch, working-tree status, languages, and file inventory.
+- [x] Extract Python imports and class/function declarations with source evidence.
+- [x] Generate a best-effort internal import graph and Mermaid diagram.
+- [x] Produce an evidence-linked ledger for narrow structural observations.
+- [x] Label Python parse errors as observations, not automatically confirmed defects.
+- [ ] Improve import resolution for relative imports and package submodules.
+- [ ] Extract routes/API endpoints and test references with language-specific adapters.
+- [ ] Add schema validation and golden-file tests for the bundle format.
+- [ ] Record dependency manifests and test commands.
+- [ ] Add a hand-labeled evaluation corpus and measure precision, evidence validity, graph coverage, and repeat-run stability.
 
 ## Phase 2 — Quality and evaluation
 
@@ -48,13 +51,13 @@ This roadmap is exploratory. Prioritize validating the core model before expandi
 
 - [ ] Convert accepted findings into scoped task specifications.
 - [ ] Give agents isolated worktrees, minimal credentials, and bounded tool access.
-- [ ] Require a proposed test and a clear acceptance criterion before editing.
+- [ ] Require a proposed test and clear acceptance criterion before editing.
 - [ ] Run formatters, tests, static analysis, and relevant proofs.
 - [ ] Produce a patch summary linking changes to the original finding and model claims.
 - [ ] Open draft PRs only; require human review and normal branch protections.
 - [ ] Add cancellation, cost limits, timeouts, and audit logs.
 
-## Non-goals for the first release
+## Initial-release non-goals
 
 - Full formal verification of arbitrary programs.
 - Automatically inferring product intent without human input.

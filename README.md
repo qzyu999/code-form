@@ -2,13 +2,45 @@
 
 **Make software systems explicit, inspectable, and improvable.**
 
-code-form is an open-source project exploring how AI can reconstruct a codebase as an evidence-linked system model, analyze that model, formalize selected properties, and help engineers make safer changes.
+code-form explores how AI can reconstruct a codebase as an evidence-linked system model, analyze that model, formalize selected properties, and help engineers make safer changes.
 
-Instead of jumping directly from source code to code edits, code-form introduces an intermediate representation of the system: components, interfaces, data flows, state machines, assumptions, invariants, requirements, and evidence.
+> **Status:** Early prototype. The initial CLI is a deterministic, read-only structural inventory, not a complete architecture reconstruction or source-code verifier.
 
-> **Status:** Early concept / design-stage scaffold. Nothing in this repository currently claims to prove arbitrary source code correct.
+## Quick start
 
-## The workflow
+Requires Python 3.10 or newer. The core CLI has no runtime dependencies.
+
+```bash
+python -m pip install -e .
+code-form analyze .
+```
+
+Write the JSON bundle to a file:
+
+```bash
+code-form analyze . --output code-form-report.json
+```
+
+Or run without installing:
+
+```bash
+PYTHONPATH=src python -m code_form.cli analyze . --output code-form-report.json
+```
+
+The analyzer does not import or execute code from the repository being analyzed. It inventories files, parses Python syntax with the standard-library AST, records declarations and best-effort internal import edges, identifies main guards and likely test paths, and emits JSON with evidence references and a Mermaid dependency graph.
+
+## First analyzer output
+
+- Repository path, Git commit/branch, and working-tree status when available.
+- File inventory, language counts, sizes, line counts, and SHA-256 hashes.
+- Python functions/classes and import statements with file/line evidence.
+- Best-effort internal Python import edges.
+- Observed main guards and Python parse errors, explicitly labeled as observations.
+- Mermaid dependency graph and machine-readable JSON bundle.
+
+Only Python is structurally parsed. Other file types are inventoried but not semantically analyzed. Import resolution does not capture every dynamic or runtime relationship.
+
+## Broader workflow
 
 1. **Ingest** a repository, its tests, configuration, dependency metadata, and documentation.
 2. **Reconstruct** an evidence-linked model of its architecture and behavior.
@@ -19,13 +51,13 @@ Instead of jumping directly from source code to code edits, code-form introduces
 
 ## Design principles
 
-- **Evidence before confidence.** Every material claim should point to source locations, tests, configuration, or an explicitly marked inference.
+- **Evidence before confidence.** Material claims should point to source, tests, configuration, or explicitly marked inference.
 - **Separate fact from hypothesis.** Observed code, inferred intent, proposed requirements, and proven properties are different things.
-- **Formalize selectively.** Use Lean for properties where a precise model and proof are worth the cost; do not force every architectural observation into theorem proving.
-- **Keep the model versioned.** A model is tied to a repository revision and should be diffable across commits.
+- **Formalize selectively.** Use Lean where a precise model and proof are worth the cost.
+- **Keep the model versioned.** Tie a model to a repository revision and make it diffable across commits.
 - **Human approval for consequential changes.** Agents can investigate and propose; merging and deployment remain governed by repository policy.
-- **Treat the repository as untrusted input.** Do not execute project code or agent-generated commands without sandboxing and explicit controls.
-- **Make uncertainty visible.** A missing proof is not a failed proof; a test passing is not a universal correctness guarantee.
+- **Treat repositories as untrusted input.** Do not execute project code or agent-generated commands without sandboxing and explicit controls.
+- **Make uncertainty visible.** A missing proof is not a failed proof; a passing test is not a universal correctness guarantee.
 
 ## Proposed architecture
 
@@ -48,56 +80,17 @@ flowchart TD
     M --> N[Reviewable pull request]
 ```
 
-## A possible first milestone
-
-Build a **read-only CLI** for one language and one repository:
-
-```bash
-code-form analyze .
-```
-
-It should emit a versioned bundle containing:
-- repository and commit metadata;
-- a component/dependency graph;
-- Mermaid architecture and sequence diagrams;
-- a claim ledger with evidence references and confidence;
-- assumptions, invariants, and open questions;
-- findings with severity, rationale, and reproducible evidence;
-- suggested tests and candidate properties for later formalization.
-
-Do not begin with autonomous PR generation. First demonstrate that the reconstructed model is useful, traceable, and stable across repeated runs.
-
-## Suggested initial stack
-
-Keep this provisional until the first language and use case are chosen.
-
-- **CLI / core:** Python or TypeScript; choose one and keep the core deterministic where possible.
-- **Structural extraction:** language-native parsers and existing static-analysis tools rather than relying on an LLM to infer all code relationships.
-- **Model format:** versioned JSON Schema, with Markdown/Mermaid as generated views.
-- **Formal layer:** Lean 4 for carefully scoped models and proofs.
-- **UI:** a local web application that reads analysis bundles before introducing a persistent backend.
-- **Agent execution:** isolated worktrees or sandboxes, bounded permissions, explicit budgets, tests, and human-reviewed PRs.
-
 ## What code-form is not
 
 - Not a guarantee that an LLM understands an entire repository.
 - Not a replacement for tests, code review, static analysis, or security review.
-- Not a claim that diagrams generated from source are automatically correct.
-- Not an automatic source-to-Lean verifier in its initial form.
+- Not a claim that generated diagrams are automatically correct.
+- Not an automatic source-to-Lean verifier.
 - Not an autonomous agent with unrestricted write or deployment access.
 
-## Roadmap
+## Roadmap and contributing
 
-See [ROADMAP.md](ROADMAP.md) and [docs/system-model.md](docs/system-model.md).
-
-## Contributing
-
-Early feedback is especially useful on:
-- which claims should be represented in the canonical model;
-- how evidence should be linked to source code;
-- which language should be supported first;
-- how to evaluate model accuracy and usefulness;
-- which properties are realistic candidates for Lean.
+See [ROADMAP.md](ROADMAP.md) and [docs/system-model.md](docs/system-model.md). Early feedback is especially useful on evidence design, model accuracy, supported languages, evaluation methods, and realistic Lean proof targets.
 
 ## License
 
