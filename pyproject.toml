@@ -1,0 +1,18 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-form"
+version = "0.1.0"
+description = "Evidence-linked, read-only structural analysis for software repositories"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { file = "LICENSE" }
+dependencies = []
+
+[project.scripts]
+code-form = "code_form.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
