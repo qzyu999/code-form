@@ -170,7 +170,7 @@ def analyze_repository(repository: str | Path) -> dict:
         ],
     }
     trees, modules, symbols, bindings, test_refs, test_evidence, routes = {}, {}, {}, {}, set(), {}, []
-    evidence_map, relationship_ids = {}, set()
+    evidence_map, relationships_by_id, claims_by_id, findings_by_id = {}, {}, {}, {}
 
     def evidence(path: str, start: int, end: int | None = None, note: str = "") -> dict:
         key = (path, start, end or start, note)
@@ -182,30 +182,51 @@ def analyze_repository(repository: str | Path) -> dict:
         return evidence_map[key]
 
     def claim(kind: str, scope: str, statement: str, refs: list[dict], status: str = "observed", confidence: float = 1.0) -> None:
-        bundle["claims"].append({
-            "id": stable_id("claim", kind, scope, statement), "statement": statement, "status": status,
+        identifier = stable_id("claim", kind, scope, statement)
+        normalized = [{k: v for k, v in ref.items() if k != "id"} for ref in refs]
+        if identifier in claims_by_id:
+            existing = claims_by_id[identifier]["evidence"]
+            existing.extend(ref for ref in normalized if ref not in existing)
+            return
+        item = {
+            "id": identifier, "statement": statement, "status": status,
             "scope": scope, "confidence": confidence, "assumptions": [],
-            "evidence": [{k: v for k, v in ref.items() if k != "id"} for ref in refs],
+            "evidence": normalized,
             "contradictions": [], "created_by": f"python-ast/{__version__}",
-        })
+        }
+        claims_by_id[identifier] = item
+        bundle["claims"].append(item)
 
     def finding(rule: str, scope: str, title: str, refs: list[dict], rationale: str,
                 validation: str, severity: str = "medium", uncertainty: str = "Static evidence needs human validation.") -> None:
-        bundle["findings"].append({
-            "id": stable_id("finding", rule, scope), "rule": rule, "component_id": scope,
+        identifier = stable_id("finding", rule, scope)
+        evidence_ids = [ref["id"] for ref in refs]
+        if identifier in findings_by_id:
+            existing = findings_by_id[identifier]["evidence_ids"]
+            existing.extend(ref for ref in evidence_ids if ref not in existing)
+            return
+        item = {
+            "id": identifier, "rule": rule, "component_id": scope,
             "title": title, "severity": severity, "status": "inferred", "confidence": 0.8,
-            "evidence_ids": [ref["id"] for ref in refs], "rationale": rationale,
+            "evidence_ids": evidence_ids, "rationale": rationale,
             "impact": "Reduced confidence in behavior or change safety.", "uncertainty": uncertainty,
             "suggested_validation": validation,
             "suggested_test": validation,
-        })
+        }
+        findings_by_id[identifier] = item
+        bundle["findings"].append(item)
 
     def relationship(source: str, target: str, kind: str, ref: dict) -> None:
         identifier = stable_id("relation", kind, source, target)
-        if identifier not in relationship_ids:
-            bundle["relationships"].append({"id": identifier, "source": source, "target": target,
-                                            "kind": kind, "evidence_ids": [ref["id"]]})
-            relationship_ids.add(identifier)
+        if identifier in relationships_by_id:
+            refs = relationships_by_id[identifier]["evidence_ids"]
+            if ref["id"] not in refs:
+                refs.append(ref["id"])
+        else:
+            item = {"id": identifier, "source": source, "target": target,
+                    "kind": kind, "evidence_ids": [ref["id"]]}
+            relationships_by_id[identifier] = item
+            bundle["relationships"].append(item)
 
     for source in sources:
         path, content = source["path"], source["content"]

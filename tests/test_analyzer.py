@@ -70,6 +70,33 @@ class AnalyzerTests(unittest.TestCase):
             ref_claim = next(c for c in bundle["claims"] if c["statement"] == "A test function directly references pkg.a.run.")
             self.assertTrue(any(e["reference"] == "tests/test_a.py" for e in ref_claim["evidence"]))
 
+    def test_repeated_imports_and_handlers_preserve_all_evidence(self):
+        with TemporaryWorkspace() as temporary:
+            root = Path(temporary)
+            (root / "helper.py").write_text("def helper():\n    return 1\n", encoding="utf-8")
+            (root / "main.py").write_text(
+                "from helper import helper\n"
+                "def run():\n"
+                "    from helper import helper\n"
+                "    try:\n"
+                "        helper()\n"
+                "    except Exception:\n"
+                "        pass\n"
+                "    try:\n"
+                "        helper()\n"
+                "    except Exception:\n"
+                "        pass\n", encoding="utf-8")
+            bundle = analyze_repository(root)
+            validate_bundle(bundle)
+            claim = next(c for c in bundle["claims"] if c["statement"] == "main imports helper.helper.")
+            self.assertEqual([1, 3], [e["line_start"] for e in claim["evidence"]])
+            finding = next(f for f in bundle["findings"] if f["rule"] == "swallowed-exception")
+            self.assertEqual(2, len(finding["evidence_ids"]))
+            edge = next(r for r in bundle["relationships"] if r["kind"] == "imports")
+            self.assertEqual(2, len(edge["evidence_ids"]))
+            call_edge = next(r for r in bundle["relationships"] if r["kind"] == "calls")
+            self.assertEqual(2, len(call_edge["evidence_ids"]))
+
     def test_model_counterexample_and_snapshot_comparison(self):
         with TemporaryWorkspace() as temporary:
             root = Path(temporary)
