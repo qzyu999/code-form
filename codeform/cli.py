@@ -8,6 +8,7 @@ from .analyzer import analyze_repository
 from .model import compare_bundles, report_markdown, validate_bundle
 from .server import Application, make_server
 from .store import Store
+from .proofs import find_lean, verify_bundle
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,6 +24,12 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--data-dir", type=Path, help="Snapshot/review storage; defaults to <workspace>/.codeform.")
     serve.add_argument("--port", type=int, default=7331, help="Loopback HTTP port; 0 chooses an available port (default: 7331).")
     serve.add_argument("--demo", action="store_true", help="Analyze all bundled example repositories on startup.")
+    serve.add_argument("--lean", type=Path, help="Pinned Lean 4.19.0 executable for the proof checker.")
+    verify = commands.add_parser("verify", help="Check generated transfer/workflow proofs with pinned Lean.")
+    verify.add_argument("repository", nargs="?", default=".")
+    verify.add_argument("--store", type=Path, default=Path(".codeform"))
+    verify.add_argument("--output", "-o", type=Path, default=Path(".codeform/verification.json"))
+    verify.add_argument("--lean", type=Path)
     compare = commands.add_parser("compare", help="Compare two exported bundle JSON files.")
     compare.add_argument("before", type=Path)
     compare.add_argument("after", type=Path)
@@ -49,7 +56,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "serve":
             if not 0 <= args.port <= 65535:
                 raise ValueError("Port must be between 0 and 65535.")
-            app = Application(args.workspace, args.data_dir)
+            app = Application(args.workspace, args.data_dir, args.lean)
             try:
                 if args.demo:
                     app.seed_examples()
@@ -73,6 +80,20 @@ def main(argv: list[str] | None = None) -> int:
             for bundle in bundles:
                 validate_bundle(bundle)
             print(json.dumps(compare_bundles(*bundles), indent=2, ensure_ascii=False))
+        elif args.command == "verify":
+            bundle = analyze_repository(args.repository)
+            store = Store(args.store)
+            store.save(bundle)
+            report = verify_bundle(bundle, find_lean(args.lean), store.path / "proof-runs")
+            store.save_verification(bundle["id"], report)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            print(f"Verification: {report['summary']}")
+            print(f"Snapshot: {bundle['id']}\nReport: {args.output.resolve()}")
+            if not report["artifacts"] or any(report["summary"][key] for key in ("unsupported", "not_run", "error", "timeout")):
+                return 1
+            if report["summary"]["disproved"]:
+                return 2
         return 0
     except (ValueError, OSError, KeyError) as error:
         parser.exit(1, f"code-form: {error}\n")

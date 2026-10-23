@@ -12,13 +12,15 @@ software properties from explicit assumptions and program semantics, explain
 the dependency of each conclusion, and help repair implementations that
 violate their specifications.
 
-The current release provides repository ingestion, static structural facts,
-captured evidence, review, and snapshot comparison. It checks terminal-state
-properties of literal finite tables and exports unchecked Lean candidates
-containing `sorry`. It does not run Lean, reason symbolically about Python
-functions, prove implementation refinement, or generate verified repairs.
-Those features must be implemented before the application can make the
-guarantees described below.
+The initial implementation now checks complete Lean proofs for an exact
+integer-transfer adapter and finite workflow models, exposes assumptions and
+axiom dependencies, validates counterexamples, and compares a faulty transfer
+with a guarded implementation. See [proof-checking.md](proof-checking.md).
+It retains the original static analyzer and unchecked candidates separately.
+
+General symbolic Python translation, general assumption consistency checking,
+formal implementation refinement, and automatic verified repair execution
+remain unimplemented. The broader architecture below describes that target.
 
 [Axiom's mission](https://axiommath.ai/mission/) motivates a
 conjecture–prove–verify loop, and [AXLE](https://axle.axiommath.ai/) provides

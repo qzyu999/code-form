@@ -19,6 +19,14 @@ Track implementation in [issue #2](https://github.com/qzyu999/code-form/issues/2
 - [ ] Propose an isolated repair and regression test, then re-verify affected obligations.
 - [ ] Demonstrate integer-transfer and workflow examples with valid, invalid, and unsupported cases in CI.
 
+Initial implementation progress: a fixed integer-transfer AST adapter now
+generates complete Lean arithmetic proofs and counterexamples; workflow proofs
+include induction over arbitrary finite event sequences. The optional checker
+records axiom dependencies and the UI exposes assumptions, proof source, and
+repair comparisons. General translation, assumption solving, formal refinement,
+and automatic repair execution remain open. See
+[proof-checking.md](docs/proof-checking.md) for the implemented scope.
+
 ## Phase 0 — Define the model
 
 - [x] Choose the first language and target repository type: local Python repositories.

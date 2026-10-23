@@ -11,18 +11,21 @@ from urllib.parse import parse_qs, urlparse
 from .analyzer import analyze_repository
 from .model import compare_bundles, report_markdown, validate_bundle
 from .store import Store, task_spec, utc_now
+from .proofs import checker_info, find_lean, proof_plan, verify_bundle
 
 WEB = Path(__file__).parent / "web"
 MAX_REQUEST_BYTES = 20_000_000
 
 
 class Application:
-    def __init__(self, workspace: Path, data_dir: Path | None = None):
+    def __init__(self, workspace: Path, data_dir: Path | None = None, lean: Path | None = None):
         self.workspace = workspace.resolve()
         if not self.workspace.is_dir():
             raise ValueError("Workspace must be an existing directory.")
         self.store = Store(data_dir or self.workspace / ".codeform")
         self.token = secrets.token_urlsafe(32)
+        self.lean = find_lean(lean)
+        self.proof_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lean")
         self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="analysis")
         self.jobs: dict[str, dict] = {}
         self.lock = threading.Lock()
@@ -38,6 +41,8 @@ class Application:
                         "payment-service": "Routes, persistence, test gaps, and a documented API mismatch.",
                         "order-workflow": "A finite order state machine with a terminal-state counterexample.",
                         "cyclic-service": "A dependency cycle, a swallowed error, and an untested interface.",
+                        "verified-transfer": "Checked integer theorems, an overdraft counterexample, and a guarded repair.",
+                        "verified-workflow": "A Lean induction proof over every finite event sequence.",
                     }
                     self.examples.append({"name": path.name, "path": str(path),
                                           "description": descriptions.get(path.name, "Example Python repository.")})
@@ -88,6 +93,33 @@ class Application:
 
     def close(self) -> None:
         self.executor.shutdown(wait=True, cancel_futures=True)
+        self.proof_executor.shutdown(wait=True, cancel_futures=True)
+
+    def submit_verification(self, identifier: str) -> dict:
+        bundle = self.store.get(identifier)["bundle"]
+        info = checker_info(self.lean)
+        if not info["available"]:
+            raise ValueError(info["error"])
+        with self.lock:
+            if any(job.get("kind") == "verification" and job["status"] in {"queued", "running"} for job in self.jobs.values()):
+                raise ValueError("A proof check is already running; wait for it to finish.")
+            job_id = "job_" + secrets.token_hex(8)
+            job = {"id": job_id, "kind": "verification", "status": "queued", "snapshot_id": identifier, "created_at": utc_now()}
+            self.jobs[job_id] = job
+        self.proof_executor.submit(self._verify, job_id, bundle)
+        return dict(job)
+
+    def _verify(self, job_id: str, bundle: dict) -> None:
+        with self.lock:
+            self.jobs[job_id]["status"] = "running"
+        try:
+            report = verify_bundle(bundle, self.lean, self.store.path / "proof-runs")
+            self.store.save_verification(bundle["id"], report)
+            update = {"status": "complete", "summary": report["summary"]}
+        except Exception as error:
+            update = {"status": "failed", "error": str(error)}
+        with self.lock:
+            self.jobs[job_id].update(update)
 
 
 def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
@@ -143,7 +175,8 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                     self._json(200, {"status": "ok", "version": "0.1.0"})
                 elif path == "/api/bootstrap":
                     self._json(200, {"token": app.token, "workspace": str(app.workspace),
-                                     "examples": app.examples, "snapshots": app.store.list()})
+                                     "examples": app.examples, "snapshots": app.store.list(),
+                                     "proof_checker": checker_info(app.lean)})
                 elif path == "/api/snapshots":
                     self._json(200, app.store.list())
                 elif path.startswith("/api/jobs/"):
@@ -164,7 +197,11 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                     record = app.store.get(parts[0])
                     bundle = record["bundle"]
                     if len(parts) == 1:
-                        self._json(200, {**record, "annotations": app.store.annotations(parts[0])})
+                        self._json(200, {**record, "annotations": app.store.annotations(parts[0]),
+                                         "verification": app.store.verification(parts[0]),
+                                         "proof_plan": proof_plan(bundle)})
+                    elif len(parts) == 2 and parts[1] == "verification":
+                        self._json(200, app.store.verification(parts[0]))
                     elif len(parts) == 2 and parts[1] == "export":
                         kind = query.get("format", ["json"])[0]
                         if kind == "json":
@@ -219,6 +256,8 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                     elif parts[1] == "tasks":
                         bundle = app.store.get(parts[0])["bundle"]
                         self._json(200, task_spec(bundle, payload.get("finding_id", ""), app.store.annotations(parts[0])))
+                    elif parts[1] == "verify":
+                        self._json(202, app.submit_verification(parts[0]))
                     else:
                         raise KeyError("Endpoint not found.")
                 else:

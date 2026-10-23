@@ -6,6 +6,8 @@ Use Python 3.11 or newer and Git. Git metadata is optional for analysis, but
 Git is needed to clone this repository and run the complete test suite.
 The application uses the Python standard library: no API key, database,
 Node build, or runtime package installation is required.
+Optional mathematical proof checking additionally needs pinned Lean 4.19.0;
+see [proof-checking.md](proof-checking.md) for setup and operation.
 
 Windows / PowerShell:
 
@@ -48,7 +50,7 @@ On macOS/Linux:
 
 Open **http://127.0.0.1:7331**. Keep that terminal open while using the app.
 The command prints the URL and allowed workspace once the server is ready.
-With `--demo`, the three examples are analyzed before the URL is printed.
+With `--demo`, the five examples are analyzed before the URL is printed.
 They may appear alongside existing snapshots in that data directory.
 
 The equivalent Windows helper is:
@@ -113,6 +115,7 @@ Inspect its command with `ps -p <PID> -o args=`. For this server, `kill -INT
 | `--data-dir DIRECTORY` | `<workspace>/.codeform` | Snapshot and review storage. An explicit relative value begins at the server's working directory. |
 | `--port NUMBER` | `7331` | Loopback HTTP port. Use `0` to choose a free port and read the printed URL. |
 | `--demo` | Off | Analyze bundled examples on startup when they are inside the allowed workspace. |
+| `--lean EXECUTABLE` | Local toolchain or `lean` on PATH | Optional pinned Lean 4.19.0 checker for generated proof obligations. |
 
 For repositories alongside code-form, allow their common parent but keep
 storage in this checkout:
@@ -194,9 +197,10 @@ The selected data directory contains:
 | --- | --- |
 | `snapshot_<id>.json` | Creation time and the immutable analysis bundle, including captured source. |
 | `snapshot_<id>.annotations.json` | Review statuses, notes, author, and update times for that snapshot. |
+| `snapshot_<id>.verification.json` | Latest locally checked mathematical results and proof/checker evidence. |
 | `*.tmp` | Temporary atomic-write files; an interrupted write may leave one behind. |
 
-UI JSON exports contain the bundle, **not review annotations**. Markdown and
+UI JSON exports contain the bundle, **not review annotations or verification reports**. Markdown and
 Mermaid exports are generated views. Accepted task exports include that
 finding's review note. Back up the entire data directory to preserve all
 snapshots and reviews.

@@ -110,6 +110,13 @@ placeholder. They are always `proposed`, with checker status `not_run`.
 Implementation refinement, persistence, concurrency, and unmodeled events
 remain outside the artifact.
 
+`codeform/proofs.py` adds a separate optional verification path with fixed
+complete proof templates. It checks integer transfer properties, concrete
+counterexamples, and workflow induction using pinned Lean 4.19.0. Results live
+in a separate verification record and UI view; legacy analysis candidates are
+not promoted. See [proof-checking.md](proof-checking.md) for exact source
+support, dependencies, execution controls, and trust boundaries.
+
 ## Extensions
 
 The next central milestone is

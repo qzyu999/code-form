@@ -59,7 +59,7 @@ class Store:
     def list(self) -> list[dict]:
         records = []
         for path in self.path.glob("snapshot_*.json"):
-            if path.name.endswith(".annotations.json"):
+            if path.name.endswith((".annotations.json", ".verification.json")):
                 continue
             try:
                 record = self.get(path.stem)
@@ -89,6 +89,18 @@ class Store:
             annotations[entity_id] = {"status": status, "note": note, "updated_at": utc_now(), "author": "local reviewer"}
             self._write(self._path(identifier, ".annotations.json"), annotations)
             return annotations[entity_id]
+
+    def verification(self, identifier: str) -> dict | None:
+        self.get(identifier)
+        target = self._path(identifier, ".verification.json")
+        return json.loads(target.read_text(encoding="utf-8")) if target.exists() else None
+
+    def save_verification(self, identifier: str, report: dict) -> None:
+        bundle = self.get(identifier)["bundle"]
+        if report.get("snapshot_id") != identifier or report.get("repository_content_sha256") != bundle["repository"]["content_sha256"]:
+            raise ValueError("Verification report does not match the captured snapshot.")
+        with self.lock:
+            self._write(self._path(identifier, ".verification.json"), report)
 
 
 def task_spec(bundle: dict, finding_id: str, annotations: dict) -> dict:

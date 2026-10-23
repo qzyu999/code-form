@@ -1,0 +1,11 @@
+schema_version = "1.0.0"
+adapter = "integer-transfer-v1"
+
+# Contract data selects known mathematical properties; it is never evaluated.
+[[contracts]]
+function = "transfer.transfer_unchecked"
+properties = ["conservation", "nonnegative", "safety"]
+
+[[contracts]]
+function = "transfer.transfer_guarded"
+properties = ["conservation", "nonnegative", "safety"]
