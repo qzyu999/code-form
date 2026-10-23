@@ -27,6 +27,12 @@ repair comparisons. General translation, assumption solving, formal refinement,
 and automatic repair execution remain open. See
 [proof-checking.md](docs/proof-checking.md) for the implemented scope.
 
+The [agent API](docs/api.md) now provides versioned context, fixed obligations,
+controlled checker attempts, immutable diagnostics/proposal history, and
+reviews. A Python client and CLI let external agents work through the service.
+No model is automatically launched; general proof generation and new checked
+contract semantics remain future capabilities.
+
 ## Phase 0 — Define the model
 
 - [x] Choose the first language and target repository type: local Python repositories.

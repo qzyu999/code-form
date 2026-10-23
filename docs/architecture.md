@@ -98,6 +98,20 @@ while retaining the complete model.
 
 This is a local reviewer application, not an authenticated multi-user service.
 
+## External reasoning API
+
+`codeform/agent_api.py` supplies versioned reasoning context, fixed proof
+obligations, validated draft proposals, and review records.
+`codeform/api_spec.py` publishes the OpenAPI contract; `codeform/client.py`
+and the `codeform api` CLI call the same `/api/v1` HTTP surface.
+The Agent workspace displays attempts, diagnostics, drafts, and reviews.
+
+The server runs checker attempts against its own immutable obligation
+declarations and controlled strategies. Clients submit IDs and hashes rather
+than executable Lean. Attempts and proposals persist as separate immutable
+records; review appends new records without promoting drafts to proofs.
+See [api.md](api.md) for integration and limits.
+
 ## Formal boundary
 
 The finite checker enumerates transitions and checks whether a declared

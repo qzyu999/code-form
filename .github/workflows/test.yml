@@ -44,3 +44,4 @@ jobs:
           lean --version
           .venv/bin/python -c "from codeform.proofs import checker_info,find_lean; assert checker_info(find_lean())['available']"
           .venv/bin/python -m unittest discover -s tests -p test_proofs.py -v
+          .venv/bin/python -m unittest discover -s tests -p test_agent_api.py -v

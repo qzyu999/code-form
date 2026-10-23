@@ -9,6 +9,7 @@ from .model import compare_bundles, report_markdown, validate_bundle
 from .server import Application, make_server
 from .store import Store
 from .proofs import find_lean, verify_bundle
+from .client import CodeFormClient, ApiError
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -35,9 +36,71 @@ def main(argv: list[str] | None = None) -> int:
     compare.add_argument("after", type=Path)
     validate = commands.add_parser("validate", help="Validate a bundle's schema, references, hashes, and evidence ranges.")
     validate.add_argument("bundle", type=Path)
+    api = commands.add_parser("api", help="Call the running v1 agent API; no model credentials required.")
+    api.add_argument("--url", default="http://127.0.0.1:7332")
+    actions = api.add_subparsers(dest="api_action", required=True)
+    actions.add_parser("capabilities", help="Show available tools and limits.")
+    actions.add_parser("snapshots", help="List saved snapshots.")
+    api_analyze = actions.add_parser("analyze", help="Queue analysis through the service.")
+    api_analyze.add_argument("path")
+    api_analyze.add_argument("--wait", action="store_true")
+    for action in ("snapshot", "context", "obligations", "attempts", "proposals"):
+        command = actions.add_parser(action)
+        command.add_argument("snapshot_id")
+    source = actions.add_parser("source", help="Read captured evidence.")
+    source.add_argument("snapshot_id")
+    source.add_argument("path")
+    source.add_argument("--start", type=int)
+    source.add_argument("--end", type=int)
+    attempt = actions.add_parser("attempt", help="Try a controlled strategy against the exact goal.")
+    attempt.add_argument("snapshot_id")
+    attempt.add_argument("obligation_id")
+    attempt.add_argument("--strategy", choices=("generated", "simplify", "decide"), default="generated")
+    attempt.add_argument("--agent", default="CLI agent")
+    attempt.add_argument("--request-id")
+    attempt.add_argument("--wait", action="store_true")
+    proposal = actions.add_parser("propose", help="Save an evidence-linked draft from a JSON file.")
+    proposal.add_argument("snapshot_id")
+    proposal.add_argument("--file", type=Path, required=True)
+    review = actions.add_parser("review", help="Record a separate proposal review.")
+    review.add_argument("snapshot_id")
+    review.add_argument("proposal_id")
+    review.add_argument("--decision", choices=("accepted", "rejected", "needs_changes"), required=True)
+    review.add_argument("--note", required=True)
+    review.add_argument("--reviewer", required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command == "analyze":
+        if args.command == "api":
+            client = CodeFormClient(args.url)
+            action = args.api_action
+            if action in {"capabilities", "snapshots"}:
+                result = getattr(client, action)()
+            elif action == "analyze":
+                result = client.analyze(args.path)
+                if args.wait:
+                    result = client.wait(result)
+            elif action in {"snapshot", "context", "obligations", "attempts", "proposals"}:
+                result = getattr(client, action)(args.snapshot_id)
+            elif action == "source":
+                result = client.source(args.snapshot_id, args.path, args.start, args.end)
+            elif action == "attempt":
+                obligation = next((o for o in client.obligations(args.snapshot_id)["obligations"]
+                                   if o["id"] == args.obligation_id), None)
+                if obligation is None:
+                    raise ValueError("Obligation not found in this snapshot.")
+                result = client.submit_attempt(args.snapshot_id, obligation, args.strategy, args.agent, args.request_id)
+                if args.wait:
+                    job = client.wait(result)
+                    result = client.attempt(args.snapshot_id, job["attempt_id"])
+            elif action == "propose":
+                payload = json.loads(args.file.read_text(encoding="utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("Proposal file must contain a JSON object.")
+                result = client.propose(args.snapshot_id, payload)
+            elif action == "review":
+                result = client.review(args.snapshot_id, args.proposal_id, args.decision, args.note, args.reviewer)
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        elif args.command == "analyze":
             bundle = analyze_repository(args.repository)
             Store(args.store).save(bundle)
             if args.output:
@@ -95,5 +158,5 @@ def main(argv: list[str] | None = None) -> int:
             if report["summary"]["disproved"]:
                 return 2
         return 0
-    except (ValueError, OSError, KeyError) as error:
+    except (ValueError, OSError, KeyError, ApiError, RuntimeError) as error:
         parser.exit(1, f"code-form: {error}\n")

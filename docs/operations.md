@@ -8,6 +8,8 @@ The application uses the Python standard library: no API key, database,
 Node build, or runtime package installation is required.
 Optional mathematical proof checking additionally needs pinned Lean 4.19.0;
 see [proof-checking.md](proof-checking.md) for setup and operation.
+External agents use the [versioned local API](api.md); it requires no model
+credentials and does not automatically launch a model.
 
 Windows / PowerShell:
 
@@ -198,6 +200,7 @@ The selected data directory contains:
 | `snapshot_<id>.json` | Creation time and the immutable analysis bundle, including captured source. |
 | `snapshot_<id>.annotations.json` | Review statuses, notes, author, and update times for that snapshot. |
 | `snapshot_<id>.verification.json` | Latest locally checked mathematical results and proof/checker evidence. |
+| `agents/<snapshot_id>/...` | Immutable external-agent attempts, proposals, and append-only reviews. |
 | `*.tmp` | Temporary atomic-write files; an interrupted write may leave one behind. |
 
 UI JSON exports contain the bundle, **not review annotations or verification reports**. Markdown and

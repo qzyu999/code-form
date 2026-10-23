@@ -72,6 +72,7 @@ To reopen the demo storage used during development, add
 | Findings | Filter severity and review status; annotate, accept, dismiss, or resolve findings. |
 | Behavior | Lexical call flows, explicit transition tables, finite invariant checks, and Lean candidates. |
 | Proofs & mathematics | Locally checked Lean theorems, assumptions, derivation steps, counterexamples, proof dependencies, and source/model boundaries. |
+| Agent workspace | External agent attempts, diagnostics, evidence-linked drafts, and separate review history. |
 | Compare | Source and model changes between snapshots of the same directory. |
 | Export / import | JSON bundles, Markdown reports, Mermaid diagrams, and validated bundle import. |
 | Change tasks | Accepted findings become scoped task specifications with evidence and acceptance criteria. |
@@ -125,6 +126,23 @@ CLI verification uses the same model and checker:
 Exit code `2` means a checked counterexample was found, `1` means checking was
 unavailable/unsupported/failed, and `0` means all generated obligations were
 proved. Proof reports are separate from immutable analysis bundles.
+
+## API for external reasoning agents
+
+The [v1 API](docs/api.md) exposes snapshots, captured source, fixed obligations,
+checker attempts, diagnostics, and reviewable proposals. An external agent
+supplies the model connection; code-form requires no model API credentials.
+The API is the common surface for the UI, CLI client, Python client, and
+future MCP/Codex adapters.
+
+```powershell
+.\.venv\Scripts\python.exe -m codeform api --url http://127.0.0.1:7332 capabilities
+.\.venv\Scripts\python.exe examples/agent_client_demo.py --url http://127.0.0.1:7332
+```
+
+The authored client demo checks a fixed goal, reads diagnostics, retries, and
+saves a draft repair visible in **Agent workspace**. It does not call a model
+or edit source. OpenAPI is served at `/api/v1/openapi.json`.
 
 ## CLI
 
@@ -198,6 +216,7 @@ flowchart LR
 ```
 
 Read [verification and repair](docs/formal-verification.md),
+[agent API](docs/api.md),
 [operations](docs/operations.md), [implementation architecture](docs/architecture.md),
 [system model](docs/system-model.md), [change policy](docs/agent-safety.md),
 and the [roadmap](ROADMAP.md) for extension boundaries.

@@ -19,6 +19,7 @@ from .model import canonical_json, stable_id
 LEAN_VERSION = "4.19.0"
 PINNED_TOOLCHAIN = f"leanprover/lean4:v{LEAN_VERSION}"
 PROOF_VERSION = "integer-transfer-and-finite-model-v1"
+OBLIGATION_VERSION = "fixed-declaration-v1"
 ALLOWED_AXIOMS = {"propext", "Classical.choice", "Quot.sound"}
 TIMEOUT_SECONDS = 30
 MAX_HEARTBEATS = 400_000
@@ -341,11 +342,63 @@ def _workflow_artifacts(bundle: dict) -> list[dict]:
 
 
 def proof_plan(bundle: dict) -> list[dict]:
-    return _transfer_artifacts(bundle) + _workflow_artifacts(bundle)
+    artifacts = _transfer_artifacts(bundle) + _workflow_artifacts(bundle)
+    for artifact in artifacts:
+        if artifact["status"] != "unsupported":
+            artifact["obligation"] = bind_obligation(bundle["id"], artifact)
+    return artifacts
+
+
+def bind_obligation(snapshot_id: str, artifact: dict) -> dict:
+    """Bind the declaration before attempting its proof.
+
+    This splits trusted templates; it is not a user-supplied Lean parser.
+    """
+    source = artifact["lean_source"]
+    local_name = artifact["theorem"].rsplit(".", 1)[-1]
+    start = source.index(f"theorem {local_name} ")
+    match = re.search(r":= by(?:\n| )", source[start:])
+    if match is None:
+        raise ValueError("Generated theorem lacks a tactic proof.")
+    body_start = start + match.end()
+    footer_start = source.index(f"\n#print axioms {local_name}", body_start)
+    context, declaration = source[:start], source[start:body_start]
+    identity = {
+        "version": OBLIGATION_VERSION, "snapshot_id": snapshot_id,
+        "artifact_id": artifact["id"], "theorem": artifact["theorem"],
+        "context_sha256": hashlib.sha256(context.encode()).hexdigest(),
+        "declaration": declaration, "expected_result": artifact["expected_result"],
+        "source_evidence": artifact["evidence"], "contract_sha256": artifact.get("contract_sha256"),
+        "formula": artifact["formula"],
+    }
+    digest = hashlib.sha256(canonical_json(identity).encode()).hexdigest()
+    return {
+        **identity, "id": stable_id("obligation", digest), "sha256": digest,
+        "context_source": context,
+        "reference_body": source[body_start:footer_start],
+        "footer": source[footer_start:], "strategies": ["generated", "simplify", "decide"],
+        "binding": "Fixed generated context and theorem declaration; only controlled tactic strategies may vary.",
+    }
+
+
+def attempt_source(artifact: dict, strategy: str) -> str:
+    obligation = artifact["obligation"]
+    if strategy not in obligation["strategies"]:
+        raise ValueError("Unknown proof strategy. Choose generated, simplify, or decide.")
+    body = {"generated": obligation["reference_body"], "simplify": "  simp_all\n", "decide": "  decide\n"}[strategy]
+    return obligation["context_source"] + obligation["declaration"] + body + obligation["footer"]
 
 
 def _check_generated(artifact: dict, executable: Path, info: dict, run_dir: Path) -> dict:
     source = artifact["lean_source"]
+    obligation = artifact.get("obligation")
+    if not isinstance(obligation, dict):
+        return {"status": "error", "error": "Missing fixed proof obligation.", "axioms": []}
+    prefix = obligation["context_source"] + obligation["declaration"]
+    if not source.startswith(prefix) or not source.endswith(obligation["footer"]):
+        return {"status": "error", "error": "Proof input changes the fixed context or theorem declaration.", "axioms": []}
+    if source not in {attempt_source(artifact, strategy) for strategy in obligation["strategies"]}:
+        return {"status": "error", "error": "Proof body is outside the controlled strategy set.", "axioms": []}
     # Defense in depth: fixed templates are the only callers. Do not expose this
     # as an endpoint accepting arbitrary source; Lean elaboration can execute code.
     if re.search(r"\b(sorry|admit|axiom|unsafe|run_cmd|native_decide)\b", re.sub(r"--[^\n]*", "", source)):
@@ -372,13 +425,16 @@ def _check_generated(artifact: dict, executable: Path, info: dict, run_dir: Path
         return {"status": "error", "error": str(error), "axioms": []}
     diagnostic = (process.stdout + process.stderr)[:32_000]
     # #print axioms reports actual transitive dependencies, not lexical guesses.
-    match = re.search(r"depends on axioms:\s*\[([^\]]*)\]", diagnostic, re.S)
-    no_axioms = "does not depend on any axioms" in diagnostic
+    theorem = re.escape(artifact["theorem"])
+    match = re.search(rf"'{theorem}' depends on axioms:\s*\[([^\]]*)\]", diagnostic, re.S)
+    no_axioms = f"'{artifact['theorem']}' does not depend on any axioms" in diagnostic
     axioms = sorted(x.strip() for x in match[1].split(",") if x.strip()) if match else []
     accepted = process.returncode == 0 and (match is not None or no_axioms) and set(axioms) <= ALLOWED_AXIOMS
     accepted = accepted and "sorryAx" not in diagnostic and "warning:" not in diagnostic.lower()
     checker = {"toolchain": PINNED_TOOLCHAIN, "version": info["version"], "exit_code": process.returncode,
                "stdout": diagnostic, "source_sha256": hashlib.sha256(source.encode()).hexdigest(),
+               "obligation_id": obligation["id"], "obligation_sha256": obligation["sha256"],
+               "theorem": artifact["theorem"], "declaration_verified": True,
                "command": command, "timeout_seconds": TIMEOUT_SECONDS, "max_heartbeats": MAX_HEARTBEATS,
                "os_memory_sandbox": False,
                "checked_at": datetime.now(timezone.utc).isoformat(),
@@ -386,6 +442,14 @@ def _check_generated(artifact: dict, executable: Path, info: dict, run_dir: Path
                "axiom_policy": sorted(ALLOWED_AXIOMS)}
     return {"status": artifact["expected_result"] if accepted else "error", "axioms": axioms,
             "checker": checker, **({} if accepted else {"error": "Lean did not accept a complete proof with the permitted dependencies."})}
+
+
+def check_attempt(artifact: dict, strategy: str, executable: Path | None, output_dir: Path) -> dict:
+    source = attempt_source(artifact, strategy)
+    info = checker_info(executable)
+    if not info["available"]:
+        return {"status": "not_run", "error": info["error"], "axioms": [], "checker": info}
+    return _check_generated({**artifact, "lean_source": source}, executable, info, output_dir)
 
 
 def verify_bundle(bundle: dict, executable: Path | None, output_dir: Path) -> dict:

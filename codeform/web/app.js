@@ -29,7 +29,7 @@ const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const badge = (value) => `<span class="badge ${esc(value)}">${esc(value)}</span>`;
 const state = { view: "overview", snapshots: [], examples: [], record: null, token: "", workspace: "", search: "", severity: "all", status: "all", graphKind: "imports", selectedComponent: null, busy: false, proofBusy: false, diff: null, error: "", drawer: null, proof_checker: null };
-const titles = { overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", compare: "Snapshot comparison" };
+const titles = { overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", agents: "Agent workspace", compare: "Snapshot comparison" };
 let toastTimer, lastFocus;
 
 async function api(path, payload) {
@@ -65,7 +65,7 @@ function notice(text) { return `<div class="notice">${icon("info")}<span>${esc(t
 
 function shell(content) {
   const findings = state.record?.bundle.summary.findings;
-  const nav = [["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["compare", "compare", "Compare"]];
+  const nav = [["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["agents", "code", "Agent workspace"], ["compare", "compare", "Compare"]];
   return `<div class="app-shell"><aside class="sidebar">
     <a class="brand" href="/" aria-label="code-form home"><span class="brand-mark">${icon("cube")}</span><span class="brand-name">code-form<span class="muted">.</span></span></a>
     <div class="workspace-label">SYSTEM EXPLORER</div>
@@ -86,6 +86,7 @@ function header() {
     findings: "Prioritized questions and concrete counterexamples for your next review.",
     behavior: "Explore call flows, explicit state machines, and carefully bounded properties.",
     proofs: "Given these assumptions, these conclusions follow. Inspect the mathematics and its proof evidence.",
+    agents: "Review evidence-linked proposals and immutable checker attempts from external agents.",
     compare: "See what changed in the code and its evidence-linked model.",
   };
   const id = state.record?.bundle.id;
@@ -244,6 +245,16 @@ function proofCard(artifact) {
     }).join("")}<span class="evidence-strength">Captured source → ${esc(artifact.semantics)}</span></div>
     <details class="proof-details"><summary>Inspect Lean proof and axiom dependencies ${checked ? "· checked" : "· not established"}</summary><div class="axiom-ledger"><strong>Transitive axiom dependencies</strong><p>${checked ? artifact.axioms.length ? artifact.axioms.map(a => `<code>${esc(a)}</code>`).join(" ") : "None — Lean reports no axiom dependencies for this theorem." : "No accepted proof result yet."}</p><p class="model-note">Foundational axioms belong to the proof logic. Business requirements remain obligations, not added axioms.</p></div><pre class="lean-preview">${esc(artifact.lean_source)}</pre><button class="btn small" data-proof-download="${artifact.id}">${icon("download")}Download checked input</button>${artifact.checker ? `<div class="checker-record"><strong>${esc(artifact.checker.version)}</strong><p class="model-note">Exit code ${artifact.checker.exit_code} · source ${artifact.checker.source_sha256.slice(0, 16)}<br>${esc(artifact.checker.trust)}</p><pre>${esc(artifact.checker.stdout)}</pre></div>` : ""}${artifact.error ? `<p class="error-message">${esc(artifact.error)}</p>` : ""}</details></div></article>`;
 }
+function agentWorkspace() {
+  const work = state.record.agent_work || { attempts: [], proposals: [] };
+  const id = state.record.bundle.id;
+  return `<div class="panel padded"><div class="section-heading"><div><h2>One API for reasoning tools</h2><p>External agents inspect evidence, choose proof strategies, and submit drafts for review.</p></div><button class="btn" data-action="refresh-agents">${icon("refresh")}Refresh agent work</button></div><div class="agent-links"><a href="/api/v1/openapi.json" target="_blank" rel="noopener">OpenAPI contract ${icon("arrow")}</a><a href="/api/v1/snapshots/${id}/context" target="_blank" rel="noopener">Agent context ${icon("arrow")}</a><a href="/api/v1/snapshots/${id}/obligations" target="_blank" rel="noopener">Fixed obligations ${icon("arrow")}</a></div><p class="model-note">The agent supplies reasoning. The server owns the source snapshot, exact theorem statements, checker execution, and review history.</p></div>
+    <div class="section-heading agent-section"><h2>Proof attempts · ${work.attempts.length}</h2></div><div class="panel">
+    ${work.attempts.map(attempt => `<details class="agent-attempt"><summary><span class="mono">${esc(attempt.strategy)}</span> ${badge(attempt.status)}<span>${esc(attempt.statement)}</span><small class="muted">${esc(attempt.agent)}</small></summary><div class="padded"><p class="model-note">Fixed obligation <code>${esc(attempt.obligation_id)}</code><br>Attempt <code>${esc(attempt.id)}</code> · ${timeLabel(attempt.created_at)}<br>${esc(attempt.scope)}</p>${attempt.checker?.stdout ? `<pre class="lean-preview">${esc(attempt.checker.stdout)}</pre>` : ""}${attempt.error ? `<p class="error-message">${esc(attempt.error)}</p>` : ""}<p class="model-note">This attempt is recorded separately from the complete snapshot verification report.</p></div></details>`).join("") || '<div class="empty">No agent proof attempts yet. Use the API client or CLI to submit a strategy against a fixed obligation.</div>'}</div>
+    <div class="section-heading agent-section"><h2>Proposals · ${work.proposals.length}</h2></div><div class="proof-artifacts">
+    ${work.proposals.map(proposal => `<article class="panel"><div class="panel-header"><div><div class="eyebrow">${esc(proposal.kind)} · ${esc(proposal.agent)}</div><h2>${esc(proposal.title)}</h2></div>${badge(proposal.review?.decision === "rejected" ? "dismissed" : proposal.review?.decision === "accepted" ? "accepted" : "proposed")}</div><div class="padded"><h3>Rationale</h3><p class="model-note">${esc(proposal.rationale)}</p><h3>Proposed content</h3><pre class="proposal-content">${esc(proposal.content)}</pre><div class="proof-evidence-bar">${proposal.evidence.map(e => `<span class="evidence-link">${esc(e.path)}:${e.line_start}–${e.line_end}</span>`).join("")}</div><p class="model-note">Draft proposal · ${timeLabel(proposal.created_at)} · checked: false · applied: false</p>${proposal.review ? `<div class="notice"><div>Latest review: <strong>${esc(proposal.review.decision)}</strong> by ${esc(proposal.review.reviewer)}<p class="proposal-review-note">${esc(proposal.review.note)}</p></div></div>` : ""}<form class="proposal-review" data-proposal="${proposal.id}"><div class="field"><label for="decision-${proposal.id}">Review decision</label><select id="decision-${proposal.id}" name="decision"><option value="accepted">Accept intent</option><option value="needs_changes">Request changes</option><option value="rejected">Reject</option></select></div><div class="field"><label for="note-${proposal.id}">Review reasoning</label><textarea id="note-${proposal.id}" name="note" required maxlength="4000" placeholder="Record requirements, validation needed, or why this proposal should change…"></textarea></div><button class="btn primary small" type="submit">${icon("check")}Save proposal review</button></form></div></article>`).join("") || '<div class="panel empty">No proposals yet. Agents can save requirements, contract drafts, explanations, and repair suggestions with captured-source evidence.</div>'}</div>
+    ${notice("Accepting a proposal records intent and review reasoning. It does not prove a theorem, alter a checked contract, apply a patch, or run target code.")}`;
+}
 function compareView() {
   const snapshots = state.snapshots.filter(s => s.repository.path === state.record.bundle.repository.path);
   const options = snapshots.map(s => `<option value="${s.id}">${timeLabel(s.created_at)} · ${esc(s.repository.commit_sha?.slice(0, 8) || s.repository.content_sha256.slice(0, 8))}</option>`).join("");
@@ -260,7 +271,7 @@ function render() {
   const content = !state.record ? welcome() : header() + snapshotBar() + (state.busy ? '<div class="progress-panel"><span class="loading-pulse"></span>Parsing repository and linking evidence…</div>' : "") + ({
     overview, architecture, claims: () => toolbar("claims") + notice("Epistemic status describes the kind of support, not a confidence score. Observed source, proposed behavior, test results, and checked proofs are different claims."),
     findings: () => toolbar("findings") + notice("Accept a finding to export a bounded task specification with evidence and acceptance criteria. Review notes do not alter the original analysis."),
-    behavior, proofs, compare: compareView,
+    behavior, proofs, agents: agentWorkspace, compare: compareView,
   }[state.view] || overview)();
   document.getElementById("app").innerHTML = shell(content);
   document.title = `code-form — ${state.record ? repoName() + " / " + titles[state.view] : "System explorer"}`;
@@ -364,6 +375,11 @@ document.addEventListener("click", async event => {
   if (!target) return;
   try {
     if (target.dataset.view) navigate(target.dataset.view);
+    else if (target.dataset.action === "refresh-agents") {
+      state.record = await api(`/api/snapshots/${state.record.bundle.id}`);
+      render();
+      toast("Agent work refreshed from the local API.");
+    }
     else if (target.dataset.action === "verify") {
       if (state.proofBusy) return;
       const snapshot = state.record.bundle.id;
@@ -451,6 +467,15 @@ document.addEventListener("submit", async event => {
       render();
       showDrawer(drawer.kind, drawer.id, drawer.evidenceIndex);
       toast("Review saved to this snapshot.");
+    }
+    else if (event.target.matches(".proposal-review")) {
+      const form = event.target;
+      await api(`/api/v1/snapshots/${state.record.bundle.id}/proposals/${form.dataset.proposal}/reviews`, {
+        decision: form.elements.decision.value, note: form.elements.note.value, reviewer: "local reviewer",
+      });
+      state.record = await api(`/api/snapshots/${state.record.bundle.id}`);
+      render();
+      toast("Proposal review saved. The draft and original evidence remain intact.");
     }
   } catch (error) { toast(error.message); }
 });

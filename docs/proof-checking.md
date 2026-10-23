@@ -113,6 +113,9 @@ themselves are not translated or universally verified.
 The initial feasibility diagnostic has witnesses for these fixed contracts.
 There is no general consistency solver or support for arbitrary assumptions.
 A user-supplied theorem or Lean program is not accepted as checker input.
+The [agent API](api.md) additionally exposes immutable theorem declarations
+and controlled strategy attempts. Statement/context changes and unrelated
+theorems are rejected before execution.
 
 ## Commands and persistence
 
@@ -146,6 +149,9 @@ transitive axioms. The permitted foundational dependencies are `propext`,
 `Classical.choice`, and `Quot.sound`. These are reported on each theorem,
 including when no axiom dependencies are used. Business requirements are not
 invented as Lean axioms. No `native_decide` is used.
+The exact generated declaration and context are fixed before an attempt.
+Only controlled proof strategies vary; the axiom report must name the expected
+theorem. Agent attempts and their diagnostics are saved as immutable records.
 
 The trusted base includes the local Lean kernel/compiler and bundled `Std`,
 the fixed code-form generator and source adapter, and the local operating

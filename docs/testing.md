@@ -111,3 +111,9 @@ Artifacts are written under `.codeform/browser-artifacts`:
 The checked-proof examples and optional real Lean/browser tests are described
 in [proof-checking.md](proof-checking.md). Core proof integration tests run when
 the pinned Lean toolchain is available; otherwise they are explicitly skipped.
+
+The [agent API](api.md) is tested through its Python HTTP client, including
+exact obligation binding, Lean failure/retry, idempotent requests, captured
+evidence validation, proposal reviews, and persisted history. The optional
+`node tests/agents-browser.cjs` checks Agent workspace against a seeded server
+after running `examples/agent_client_demo.py`.
