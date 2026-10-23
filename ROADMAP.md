@@ -1,23 +1,24 @@
 # Roadmap
 
-This roadmap is exploratory. Prioritize validating the core model before expanding into autonomous code changes.
+The local first release implements the observation and review loop for Python.
+Unchecked items remain future work. See [docs/architecture.md](docs/architecture.md).
 
 ## Phase 0 — Define the model
 
-- [ ] Choose the first language and target repository type.
-- [ ] Define a versioned schema for components, interfaces, flows, claims, assumptions, invariants, evidence, and findings.
-- [ ] Define epistemic labels: observed, inferred, proposed, tested, proved, contradicted, unknown.
-- [ ] Specify evidence pointers using commit SHA plus file path and line/symbol range.
+- [x] Choose the first language and target repository type: local Python repositories.
+- [x] Define a versioned schema for components, interfaces, flows, claims, assumptions, invariants, evidence, and findings.
+- [x] Define epistemic labels: observed, inferred, proposed, tested, proved, contradicted, unknown.
+- [x] Specify evidence pointers using commit SHA plus file path and line/symbol range, backed by captured source hashes.
 - [ ] Create a small hand-labeled evaluation repository.
 
 ## Phase 1 — Read-only repository analyzer
 
-- [ ] Capture repository identity, commit SHA, languages, dependencies, and test commands.
-- [ ] Extract imports, declarations, call edges where supported, routes/API endpoints, and test references.
-- [ ] Generate dependency graph and Mermaid diagrams.
-- [ ] Produce an evidence-linked claim ledger.
-- [ ] Identify untested public interfaces and documented-vs-implemented mismatches as *candidates*, not automatically confirmed defects.
-- [ ] Make output deterministic where possible and record model/tool versions.
+- [x] Capture repository identity, commit SHA, languages, dependencies, and suggested test commands.
+- [x] Extract imports, declarations, supported call edges, literal route decorators, and test references.
+- [x] Generate dependency graph and Mermaid diagrams.
+- [x] Produce an evidence-linked claim ledger.
+- [x] Identify direct test-reference gaps and explicit documented API mismatches as candidates.
+- [x] Make output deterministic and record model/tool/runtime versions.
 
 ## Phase 2 — Quality and evaluation
 
@@ -25,20 +26,24 @@ This roadmap is exploratory. Prioritize validating the core model before expandi
 - [ ] Measure claim precision, evidence validity, graph coverage, and repeat-run stability.
 - [ ] Test whether findings are actionable and non-duplicative.
 - [ ] Add incremental analysis for changed files and commits.
-- [ ] Track false positives and allow engineers to dismiss or correct findings.
+- [x] Allow engineers to dismiss findings and record review reasoning per snapshot.
+- [ ] Aggregate false-positive metrics across human-reviewed evaluation repositories.
 
 ## Phase 3 — Interactive UI
 
-- [ ] Browse components, edges, flows, and state machines.
-- [ ] Click a model claim to view supporting code and tests.
-- [ ] Filter findings by severity, confidence, evidence strength, and subsystem.
-- [ ] Compare architecture models across commits.
-- [ ] Edit/annotate assumptions and requirements, with provenance.
+- [x] Browse components, edges, flows, and explicit state machines.
+- [x] Click a model claim to view captured supporting code and direct test references.
+- [x] Filter findings by severity, review status, and free-text search.
+- [ ] Add confidence, evidence-strength, and subsystem filters.
+- [x] Compare architecture models across snapshots, including commit or working-tree changes.
+- [x] Annotate claims, assumptions, and findings with review provenance.
+- [ ] Edit canonical assumptions and requirements through a versioned amendment model.
 
 ## Phase 4 — Formal methods
 
-- [ ] Select a small class of properties with clear semantics.
-- [ ] Generate candidate formal statements for human review.
+- [x] Select terminal-state invariants for explicit finite transition tables.
+- [x] Exhaustively check the extracted literal model and show counterexamples.
+- [x] Generate unchecked Lean statements for human review.
 - [ ] Build a Lean 4 model for one bounded subsystem.
 - [ ] Compile and check proofs in CI.
 - [ ] Distinguish proof of a model from proof that implementation refines that model.
@@ -46,7 +51,7 @@ This roadmap is exploratory. Prioritize validating the core model before expandi
 
 ## Phase 5 — Bounded agent workflows
 
-- [ ] Convert accepted findings into scoped task specifications.
+- [x] Convert accepted findings into exported scoped task specifications.
 - [ ] Give agents isolated worktrees, minimal credentials, and bounded tool access.
 - [ ] Require a proposed test and a clear acceptance criterion before editing.
 - [ ] Run formatters, tests, static analysis, and relevant proofs.

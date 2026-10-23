@@ -2,102 +2,158 @@
 
 **Make software systems explicit, inspectable, and improvable.**
 
-code-form is an open-source project exploring how AI can reconstruct a codebase as an evidence-linked system model, analyze that model, formalize selected properties, and help engineers make safer changes.
+code-form turns a Python repository into a versioned, evidence-linked system
+model and a local application for exploring it. Follow dependencies, inspect
+claims against captured source, review findings, compare snapshots, and export
+bounded change tasks.
 
-Instead of jumping directly from source code to code edits, code-form introduces an intermediate representation of the system: components, interfaces, data flows, state machines, assumptions, invariants, requirements, and evidence.
+**Status: working local first release.** Analysis uses Python's AST and
+deterministic rules. No API key, cloud service, or third-party runtime package
+is required. AI reconstruction, checked Lean proofs, and agent execution
+remain future extensions.
 
-> **Status:** Early concept / design-stage scaffold. Nothing in this repository currently claims to prove arbitrary source code correct.
+## Run locally
 
-## The workflow
+Python 3.11 or newer is required. Run from this checkout.
 
-1. **Ingest** a repository, its tests, configuration, dependency metadata, and documentation.
-2. **Reconstruct** an evidence-linked model of its architecture and behavior.
-3. **Analyze** the model for contradictions, missing tests, unclear assumptions, and candidate design improvements.
-4. **Formalize** selected claims and invariants in a machine-checkable form where practical.
-5. **Explore** the model and findings in a UI.
-6. **Propose changes** through isolated agent tasks, tests, patches, and reviewable pull requests.
+Windows / PowerShell:
 
-## Design principles
-
-- **Evidence before confidence.** Every material claim should point to source locations, tests, configuration, or an explicitly marked inference.
-- **Separate fact from hypothesis.** Observed code, inferred intent, proposed requirements, and proven properties are different things.
-- **Formalize selectively.** Use Lean for properties where a precise model and proof are worth the cost; do not force every architectural observation into theorem proving.
-- **Keep the model versioned.** A model is tied to a repository revision and should be diffable across commits.
-- **Human approval for consequential changes.** Agents can investigate and propose; merging and deployment remain governed by repository policy.
-- **Treat the repository as untrusted input.** Do not execute project code or agent-generated commands without sandboxing and explicit controls.
-- **Make uncertainty visible.** A missing proof is not a failed proof; a test passing is not a universal correctness guarantee.
-
-## Proposed architecture
-
-```mermaid
-flowchart TD
-    A[Repository + commit SHA] --> B[Ingestion and language adapters]
-    B --> C[Evidence store]
-    B --> D[Structural facts: symbols, imports, calls, tests]
-    D --> E[AI-assisted system reconstruction]
-    C --> E
-    E --> F[Canonical system model]
-    F --> G[Consistency and gap analysis]
-    F --> H[Formalization candidates]
-    H --> I[Lean models and proofs]
-    G --> J[Findings and prioritized opportunities]
-    I --> J
-    J --> K[Human-facing analysis UI]
-    J --> L[Bounded agent tasks]
-    L --> M[Patch + tests + CI]
-    M --> N[Reviewable pull request]
+```powershell
+python -m venv --without-pip .venv
+.\.venv\Scripts\python.exe -m codeform serve --demo
 ```
 
-## A possible first milestone
-
-Build a **read-only CLI** for one language and one repository:
+macOS / Linux:
 
 ```bash
-code-form analyze .
+python3 -m venv --without-pip .venv
+.venv/bin/python -m codeform serve --demo
 ```
 
-It should emit a versioned bundle containing:
-- repository and commit metadata;
-- a component/dependency graph;
-- Mermaid architecture and sequence diagrams;
-- a claim ledger with evidence references and confidence;
-- assumptions, invariants, and open questions;
-- findings with severity, rationale, and reproducible evidence;
-- suggested tests and candidate properties for later formalization.
+Open **http://127.0.0.1:7331**. `--demo` analyzes three example repositories
+before startup. Use the snapshot selector to switch examples, or
+**Analyze repository** to choose another Python repository.
 
-Do not begin with autonomous PR generation. First demonstrate that the reconstructed model is useful, traceable, and stable across repeated runs.
+On Windows, `.\scripts\setup.ps1` creates the environment and
+`.\scripts\start.ps1` starts the demo. Activation and installation are optional.
+The environment uses `--without-pip` because the app needs no installed packages.
 
-## Suggested initial stack
+The UI analyzes directories inside its allowed workspace, which defaults to
+the current directory. To browse sibling projects while keeping storage local:
 
-Keep this provisional until the first language and use case are chosen.
+```powershell
+.\.venv\Scripts\python.exe -m codeform serve --workspace .. --data-dir .codeform/projects
+```
 
-- **CLI / core:** Python or TypeScript; choose one and keep the core deterministic where possible.
-- **Structural extraction:** language-native parsers and existing static-analysis tools rather than relying on an LLM to infer all code relationships.
-- **Model format:** versioned JSON Schema, with Markdown/Mermaid as generated views.
-- **Formal layer:** Lean 4 for carefully scoped models and proofs.
-- **UI:** a local web application that reads analysis bundles before introducing a persistent backend.
-- **Agent execution:** isolated worktrees or sandboxes, bounded permissions, explicit budgets, tests, and human-reviewed PRs.
+Add `--port 7332` if the default port is occupied. Stop with Ctrl+C.
+The server binds to loopback and is intended for a single local reviewer.
 
-## What code-form is not
+The [operations guide](docs/operations.md) covers setup, health checks, shutdown,
+restart, storage configuration, backup/restore, updates, and troubleshooting.
+To reopen the demo storage used during development, add
+`--data-dir .codeform/demo`. Reload the browser after restarting.
 
-- Not a guarantee that an LLM understands an entire repository.
-- Not a replacement for tests, code review, static analysis, or security review.
-- Not a claim that diagrams generated from source are automatically correct.
-- Not an automatic source-to-Lean verifier in its initial form.
-- Not an autonomous agent with unrestricted write or deployment access.
+## What you can do
 
-## Roadmap
+| View | Behavior |
+| --- | --- |
+| Overview | Repository metadata, model counts, dependency map, and priority findings. |
+| Architecture | Module imports, resolved calls, direct test references, and component source. |
+| Claim ledger | Search statements, filter epistemic status, and open supporting evidence. |
+| Findings | Filter severity and review status; annotate, accept, dismiss, or resolve findings. |
+| Behavior | Lexical call flows, explicit transition tables, finite invariant checks, and Lean candidates. |
+| Compare | Source and model changes between snapshots of the same directory. |
+| Export / import | JSON bundles, Markdown reports, Mermaid diagrams, and validated bundle import. |
+| Change tasks | Accepted findings become scoped task specifications with evidence and acceptance criteria. |
 
-See [ROADMAP.md](ROADMAP.md) and [docs/system-model.md](docs/system-model.md).
+Snapshots contain captured source text, source hashes, a repository content
+hash, Git commit and working-tree metadata, analyzer/runtime versions, and
+stable entity IDs. Review writes separate annotations; it does not change
+the generated model. Task export does not execute changes.
 
-## Contributing
+## Example repositories
 
-Early feedback is especially useful on:
-- which claims should be represented in the canonical model;
-- how evidence should be linked to source code;
-- which language should be supported first;
-- how to evaluate model accuracy and usefulness;
-- which properties are realistic candidates for Lean.
+| Repository | What to investigate |
+| --- | --- |
+| [payment-service](examples/payment-service) | Routes, persistence, direct test gaps, a swallowed failure, and documented `POST /refunds` without a matching route. |
+| [order-workflow](examples/order-workflow) | A terminal state can be reopened. The finite table yields a counterexample and an unchecked Lean candidate. |
+| [cyclic-service](examples/cyclic-service) | A dependency cycle with a deferred import, broad exception handling, and an untested deletion interface. |
+
+These standalone codebases have passing standard-library tests and intentional
+findings. Passing tests do not establish omitted requirements.
+See the [testing guide](docs/testing.md) for an exercise including editing a
+copy and comparing snapshots.
+
+## CLI
+
+```powershell
+.\.venv\Scripts\python.exe -m codeform analyze examples/payment-service --output .codeform/exports/payment
+.\.venv\Scripts\python.exe -m codeform validate .codeform/exports/payment/bundle.json
+.\.venv\Scripts\python.exe -m codeform compare before/bundle.json after/bundle.json
+```
+
+`analyze` saves a snapshot under `.codeform/`. `--output` also writes
+`bundle.json`, `report.md`, `architecture.mmd`, `sequence.mmd`, and proposed
+`.lean` files. `--store` selects another snapshot directory.
+When installed as a package, `code-form` is equivalent to `python -m codeform`.
+Running from the checkout needs no installation.
+
+## Verify
+
+```powershell
+.\.venv\Scripts\python.exe -m unittest discover -s tests -v
+node --check codeform/web/app.js
+```
+
+The suite checks deterministic analysis, valid evidence, relative/aliased
+imports, target-code non-execution, invalid input, finite-model counterexamples,
+comparison, review persistence, and the HTTP analysis/review/export journey.
+Temporary files stay inside `.codeform/test-tmp`.
+
+An optional Playwright acceptance test covers the rendered app, downloads,
+re-analysis, comparison, imports, reloads, filters, and mobile layout.
+See [docs/testing.md](docs/testing.md).
+CI runs core checks on Windows and Linux with Python 3.11 and 3.14.
+
+## Analysis boundaries
+
+- Target source is parsed, never imported or executed. The app never runs
+  target tests, installs dependencies, or invokes repository scripts.
+- Static resolution is limited. Dynamic dispatch, reflection, conditional
+  imports, router prefixes, and generated routes require investigation.
+- Direct test references describe explicit calls, not execution or coverage.
+  Findings are review candidates, not automatic defect verdicts.
+- Precise documentation contracts use `API: METHOD /path` in Markdown.
+  Ordinary prose is not interpreted as an implementation requirement.
+- State machines use a literal `TRANSITIONS = {("state", "event"): "next"}`
+  table and optional `TERMINAL_STATES`. Checks establish properties of that
+  finite table only.
+- Lean exports contain a marked `sorry` placeholder. No checker runs; candidates
+  are never labeled `proved`.
+- Ingestion limits are 2,000 eligible files, 256 KB per file, and 16 MB total.
+  Build/environment directories, sensitive filenames, symbolic links, and
+  Windows junctions are excluded. Eligible code may still contain inline
+  secrets; exported snapshots include that source.
+
+## Design
+
+The smallest useful unit is an **inspectable claim**: a precise statement,
+an epistemic label, and evidence tied to a captured snapshot. Architecture,
+findings, and formal candidates are derived views sharing that evidence boundary.
+
+```mermaid
+flowchart LR
+    A[Local repository] --> B[Bounded read-only ingestion]
+    B --> C[Python AST facts and captured evidence]
+    C --> D[Versioned JSON system model]
+    D --> E[Analysis rules and finite-table checks]
+    E --> F[Local explorer and review]
+    F --> G[Reports, comparisons, and accepted task specs]
+```
+
+Read [operations](docs/operations.md), [implementation architecture](docs/architecture.md),
+[system model](docs/system-model.md), [change policy](docs/agent-safety.md),
+and the [roadmap](ROADMAP.md) for extension boundaries.
 
 ## License
 

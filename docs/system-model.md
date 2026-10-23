@@ -1,4 +1,9 @@
-# System model: initial proposal
+# System model
+
+The first release implements schema version `1.0.0` in
+[bundle.schema.json](../schemas/bundle.schema.json), with the existing claim
+schema reused unchanged. See [architecture.md](architecture.md) for adapter
+semantics and [testing.md](testing.md) for inspecting actual bundles.
 
 ## Purpose
 
@@ -15,6 +20,10 @@ The model should be a durable artifact, not just a transient prompt or a set of 
 - language/toolchain versions
 - analysis timestamp
 - configuration and scope
+
+The deterministic bundle stores captured source text and hashes. Persistence
+records `created_at` outside the bundle. The Git baseline and dirty flag are
+distinct from the exact captured-content identity.
 
 ### Component
 A module, package, service, process, subsystem, or other named unit.

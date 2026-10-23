@@ -1,0 +1,155 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://code-form.dev/schemas/bundle.schema.json",
+  "title": "code-form analysis bundle",
+  "type": "object",
+  "required": ["schema_version", "id", "analyzer", "repository", "sources", "components", "relationships", "claims", "evidence", "findings", "assumptions", "invariants", "formal_candidates", "flows", "state_machines", "interfaces", "summary", "diagrams", "limitations", "open_questions", "skipped_files"],
+  "properties": {
+    "schema_version": {"const": "1.0.0"},
+    "id": {"type": "string", "pattern": "^snapshot_[0-9a-f]{16}$"},
+    "analyzer": {
+      "type": "object",
+      "required": ["name", "version", "adapter", "python_version", "configuration"],
+      "properties": {
+        "name": {"const": "code-form"},
+        "version": {"type": "string"},
+        "implementation_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "adapter": {"const": "python-ast"},
+        "python_version": {"type": "string"},
+        "configuration": {"type": "object"}
+      }
+    },
+    "repository": {
+      "type": "object",
+      "required": ["name", "path", "commit_sha", "dirty", "content_sha256", "languages", "dependencies", "suggested_test_commands"],
+      "properties": {
+        "name": {"type": "string"},
+        "path": {"type": "string"},
+        "commit_sha": {"type": ["string", "null"]},
+        "dirty": {"type": ["boolean", "null"]},
+        "content_sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+        "languages": {"type": "array", "items": {"type": "string"}},
+        "dependencies": {"type": "array", "items": {"type": "string"}},
+        "suggested_test_commands": {"type": "array", "items": {"type": "string"}}
+      }
+    },
+    "sources": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["path", "content", "sha256", "language"],
+        "properties": {
+          "path": {"type": "string"},
+          "content": {"type": "string"},
+          "sha256": {"type": "string", "pattern": "^[0-9a-f]{64}$"},
+          "language": {"enum": ["python", "documentation", "configuration"]}
+        },
+        "additionalProperties": false
+      }
+    },
+    "components": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "name", "kind", "path", "line_start", "line_end", "public", "docstring", "signature"],
+        "properties": {
+          "id": {"type": "string"},
+          "name": {"type": "string"},
+          "kind": {"enum": ["module", "test_module", "class", "function", "method"]},
+          "path": {"type": "string"},
+          "line_start": {"type": "integer", "minimum": 1},
+          "line_end": {"type": "integer", "minimum": 1},
+          "public": {"type": "boolean"},
+          "docstring": {"type": "string"},
+          "signature": {"type": "string"},
+          "module_id": {"type": "string"},
+          "async": {"type": "boolean"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "relationships": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "source", "target", "kind", "evidence_ids"],
+        "properties": {
+          "id": {"type": "string"},
+          "source": {"type": "string"},
+          "target": {"type": "string"},
+          "kind": {"enum": ["contains", "imports", "calls", "tests"]},
+          "evidence_ids": {"type": "array", "items": {"type": "string"}}
+        },
+        "additionalProperties": false
+      }
+    },
+    "claims": {"type": "array", "items": {"$ref": "claim.schema.json"}},
+    "evidence": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "kind", "reference", "commit_sha", "line_start", "line_end", "note"],
+        "properties": {
+          "id": {"type": "string"},
+          "kind": {"const": "source"},
+          "reference": {"type": "string"},
+          "commit_sha": {"type": "string"},
+          "line_start": {"type": "integer", "minimum": 1},
+          "line_end": {"type": "integer", "minimum": 1},
+          "note": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["id", "rule", "component_id", "title", "severity", "status", "confidence", "evidence_ids", "rationale", "impact", "uncertainty", "suggested_validation", "suggested_test"],
+        "properties": {
+          "id": {"type": "string"},
+          "rule": {"type": "string"},
+          "component_id": {"type": "string"},
+          "title": {"type": "string"},
+          "severity": {"enum": ["high", "medium", "low", "info"]},
+          "status": {"const": "inferred"},
+          "confidence": {"type": "number", "minimum": 0, "maximum": 1},
+          "evidence_ids": {"type": "array", "minItems": 1, "items": {"type": "string"}},
+          "rationale": {"type": "string"},
+          "impact": {"type": "string"},
+          "uncertainty": {"type": "string"},
+          "suggested_validation": {"type": "string"},
+          "suggested_test": {"type": "string"}
+        },
+        "additionalProperties": false
+      }
+    },
+    "assumptions": {"type": "array", "items": {"$ref": "#/$defs/modelEntity"}},
+    "invariants": {"type": "array", "items": {"$ref": "#/$defs/modelEntity"}},
+    "formal_candidates": {"type": "array", "items": {"$ref": "#/$defs/modelEntity"}},
+    "flows": {"type": "array", "items": {"$ref": "#/$defs/modelEntity"}},
+    "state_machines": {"type": "array", "items": {"$ref": "#/$defs/modelEntity"}},
+    "interfaces": {"type": "array", "items": {"type": "object", "required": ["method", "path", "component_id", "evidence_ids"]}},
+    "summary": {"type": "object", "required": ["files", "modules", "symbols", "claims", "findings", "routes", "test_modules", "directly_referenced_interfaces", "public_interfaces", "severity"]},
+    "diagrams": {
+      "type": "object",
+      "required": ["architecture", "sequence"],
+      "properties": {"architecture": {"type": "string"}, "sequence": {"type": "string"}},
+      "additionalProperties": false
+    },
+    "limitations": {"type": "array", "items": {"type": "string"}},
+    "open_questions": {"type": "array", "items": {"type": "string"}},
+    "skipped_files": {"type": "array", "items": {"type": "object", "required": ["path", "reason"]}}
+  },
+  "$defs": {
+    "modelEntity": {
+      "type": "object",
+      "required": ["id", "status"],
+      "properties": {
+        "id": {"type": "string"},
+        "status": {"enum": ["observed", "inferred", "proposed", "tested", "proved", "contradicted", "unknown"]}
+      }
+    }
+  },
+  "additionalProperties": false
+}

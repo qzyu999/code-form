@@ -1,0 +1,26 @@
+name: Verify code-form
+on: [push, pull_request]
+jobs:
+  test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        python: ["3.11", "3.14"]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ matrix.python }}
+      - name: Create local virtual environment
+        run: python -m venv --without-pip .venv
+      - name: Test on Linux
+        if: runner.os != 'Windows'
+        run: .venv/bin/python -m unittest discover -s tests -v
+      - name: Test on Windows
+        if: runner.os == 'Windows'
+        run: .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+      - run: node --check codeform/web/app.js

@@ -1,0 +1,24 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "code-form"
+version = "0.1.0"
+description = "Local, evidence-linked system models for Python repositories"
+readme = "README.md"
+requires-python = ">=3.11"
+license = {text = "MIT"}
+dependencies = []
+
+[project.scripts]
+code-form = "codeform.cli:main"
+
+[tool.setuptools]
+packages = ["codeform"]
+
+[tool.setuptools.package-data]
+codeform = ["web/*"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
