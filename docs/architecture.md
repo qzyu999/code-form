@@ -112,6 +112,13 @@ remain outside the artifact.
 
 ## Extensions
 
+The next central milestone is
+[mathematical verification and repair](formal-verification.md): contracts,
+supported source semantics, symbolic obligations, checked Lean proofs,
+counterexamples, and re-verification of repairs. This document describes the
+implemented observation/review foundation; the linked design describes the
+proof engine still to build.
+
 Another language adapter can produce the same bundle. AI reconstruction can
 consume structural facts and emit separately labeled interpretations. Proof
 checking needs a controlled runner with exact toolchain and checker evidence.

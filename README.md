@@ -2,6 +2,11 @@
 
 **Make software systems explicit, inspectable, and improvable.**
 
+The intended core is mathematical verification and repair: given explicit
+assumptions and supported program semantics, establish precise properties,
+explain their dependencies, and help fix violations against the same
+specification. See the [verification design](docs/formal-verification.md).
+
 code-form turns a Python repository into a versioned, evidence-linked system
 model and a local application for exploring it. Follow dependencies, inspect
 claims against captured source, review findings, compare snapshots, and export
@@ -9,8 +14,9 @@ bounded change tasks.
 
 **Status: working local first release.** Analysis uses Python's AST and
 deterministic rules. No API key, cloud service, or third-party runtime package
-is required. AI reconstruction, checked Lean proofs, and agent execution
-remain future extensions.
+is required. This release is the observation and review foundation.
+Symbolic implementation reasoning, checked Lean proofs, and verified repairs
+are the next central milestone and are not implemented yet.
 
 ## Run locally
 
@@ -151,7 +157,8 @@ flowchart LR
     F --> G[Reports, comparisons, and accepted task specs]
 ```
 
-Read [operations](docs/operations.md), [implementation architecture](docs/architecture.md),
+Read [verification and repair](docs/formal-verification.md),
+[operations](docs/operations.md), [implementation architecture](docs/architecture.md),
 [system model](docs/system-model.md), [change policy](docs/agent-safety.md),
 and the [roadmap](ROADMAP.md) for extension boundaries.
 

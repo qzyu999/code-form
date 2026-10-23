@@ -11,6 +11,12 @@ Represent what a repository contains, what the software appears to do, which cla
 
 The model should be a durable artifact, not just a transient prompt or a set of diagrams.
 
+The intended verification extension adds precise contracts, program semantics,
+obligations, checked derivations, and repair evidence. Its result and
+trust-boundary requirements are specified in
+[formal-verification.md](formal-verification.md); those are proposed extensions,
+not fields or guarantees implemented by schema `1.0.0`.
+
 ## Core entities
 
 ### Repository snapshot
