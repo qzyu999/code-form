@@ -98,6 +98,20 @@ while retaining the complete model.
 
 This is a local reviewer application, not an authenticated multi-user service.
 
+## External reasoning API
+
+`codeform/agent_api.py` supplies versioned reasoning context, fixed proof
+obligations, validated draft proposals, and review records.
+`codeform/api_spec.py` publishes the OpenAPI contract; `codeform/client.py`
+and the `codeform api` CLI call the same `/api/v1` HTTP surface.
+The Agent workspace displays attempts, diagnostics, drafts, and reviews.
+
+The server runs checker attempts against its own immutable obligation
+declarations and controlled strategies. Clients submit IDs and hashes rather
+than executable Lean. Attempts and proposals persist as separate immutable
+records; review appends new records without promoting drafts to proofs.
+See [api.md](api.md) for integration and limits.
+
 ## Formal boundary
 
 The finite checker enumerates transitions and checks whether a declared
@@ -110,7 +124,21 @@ placeholder. They are always `proposed`, with checker status `not_run`.
 Implementation refinement, persistence, concurrency, and unmodeled events
 remain outside the artifact.
 
+`codeform/proofs.py` adds a separate optional verification path with fixed
+complete proof templates. It checks integer transfer properties, concrete
+counterexamples, and workflow induction using pinned Lean 4.19.0. Results live
+in a separate verification record and UI view; legacy analysis candidates are
+not promoted. See [proof-checking.md](proof-checking.md) for exact source
+support, dependencies, execution controls, and trust boundaries.
+
 ## Extensions
+
+The next central milestone is
+[mathematical verification and repair](formal-verification.md): contracts,
+supported source semantics, symbolic obligations, checked Lean proofs,
+counterexamples, and re-verification of repairs. This document describes the
+implemented observation/review foundation; the linked design describes the
+proof engine still to build.
 
 Another language adapter can produce the same bundle. AI reconstruction can
 consume structural facts and emit separately labeled interpretations. Proof

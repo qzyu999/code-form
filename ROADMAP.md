@@ -3,6 +3,36 @@
 The local first release implements the observation and review loop for Python.
 Unchecked items remain future work. See [docs/architecture.md](docs/architecture.md).
 
+## Next priority — Mathematical verification and repair
+
+The next product milestone is a real verification/repair loop over a documented
+Python subset. See [the design and acceptance criteria](docs/formal-verification.md).
+Existing structural analysis supports this work; UI expansion is secondary.
+Track implementation in [issue #2](https://github.com/qzyu999/code-form/issues/2).
+
+- [ ] Define reviewed contracts, environment assumptions, and explicit normal/exceptional semantics.
+- [ ] Connect captured supported Python source to a versioned semantic representation with a stated trust boundary.
+- [ ] Check assumption feasibility and generate symbolic verification obligations.
+- [ ] Produce validated counterexamples, preserving the original specification.
+- [ ] Run a pinned Lean checker and inspect transitive proof dependencies.
+- [ ] Surface scoped proof results and their assumptions in CLI artifacts and the UI.
+- [ ] Propose an isolated repair and regression test, then re-verify affected obligations.
+- [ ] Demonstrate integer-transfer and workflow examples with valid, invalid, and unsupported cases in CI.
+
+Initial implementation progress: a fixed integer-transfer AST adapter now
+generates complete Lean arithmetic proofs and counterexamples; workflow proofs
+include induction over arbitrary finite event sequences. The optional checker
+records axiom dependencies and the UI exposes assumptions, proof source, and
+repair comparisons. General translation, assumption solving, formal refinement,
+and automatic repair execution remain open. See
+[proof-checking.md](docs/proof-checking.md) for the implemented scope.
+
+The [agent API](docs/api.md) now provides versioned context, fixed obligations,
+controlled checker attempts, immutable diagnostics/proposal history, and
+reviews. A Python client and CLI let external agents work through the service.
+No model is automatically launched; general proof generation and new checked
+contract semantics remain future capabilities.
+
 ## Phase 0 — Define the model
 
 - [x] Choose the first language and target repository type: local Python repositories.
@@ -40,6 +70,10 @@ Unchecked items remain future work. See [docs/architecture.md](docs/architecture
 - [ ] Edit canonical assumptions and requirements through a versioned amendment model.
 
 ## Phase 4 — Formal methods
+
+The checked items below describe limited capabilities in the current release.
+Unchecked items and the priority milestone above are required for the intended
+proof engine.
 
 - [x] Select terminal-state invariants for explicit finite transition tables.
 - [x] Exhaustively check the extracted literal model and show counterexamples.

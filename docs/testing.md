@@ -9,7 +9,7 @@ python -m venv --without-pip .venv
 .\.venv\Scripts\python.exe -m codeform serve --demo
 ```
 
-Open http://127.0.0.1:7331. Three example repositories appear in the snapshot
+Open http://127.0.0.1:7331. Five example repositories appear in the snapshot
 selector. The app uses captured source; edits appear after re-analysis.
 Stop with Ctrl+C in the server terminal and wait for the prompt.
 See [operations.md](operations.md) for restart, storage, and troubleshooting.
@@ -107,3 +107,13 @@ Artifacts are written under `.codeform/browser-artifacts`:
 - `snapshot-comparison.png`
 - `overview-mobile.png`
 - downloaded JSON and Lean files
+
+The checked-proof examples and optional real Lean/browser tests are described
+in [proof-checking.md](proof-checking.md). Core proof integration tests run when
+the pinned Lean toolchain is available; otherwise they are explicitly skipped.
+
+The [agent API](api.md) is tested through its Python HTTP client, including
+exact obligation binding, Lean failure/retry, idempotent requests, captured
+evidence validation, proposal reviews, and persisted history. The optional
+`node tests/agents-browser.cjs` checks Agent workspace against a seeded server
+after running `examples/agent_client_demo.py`.

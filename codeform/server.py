@@ -11,21 +11,27 @@ from urllib.parse import parse_qs, urlparse
 from .analyzer import analyze_repository
 from .model import compare_bundles, report_markdown, validate_bundle
 from .store import Store, task_spec, utc_now
+from .proofs import checker_info, find_lean, proof_plan, verify_bundle
+from .agent_api import AgentService
+from .api_spec import openapi_document
 
 WEB = Path(__file__).parent / "web"
 MAX_REQUEST_BYTES = 20_000_000
 
 
 class Application:
-    def __init__(self, workspace: Path, data_dir: Path | None = None):
+    def __init__(self, workspace: Path, data_dir: Path | None = None, lean: Path | None = None):
         self.workspace = workspace.resolve()
         if not self.workspace.is_dir():
             raise ValueError("Workspace must be an existing directory.")
         self.store = Store(data_dir or self.workspace / ".codeform")
         self.token = secrets.token_urlsafe(32)
+        self.lean = find_lean(lean)
+        self.proof_executor = ThreadPoolExecutor(max_workers=1, thread_name_prefix="lean")
         self.executor = ThreadPoolExecutor(max_workers=2, thread_name_prefix="analysis")
         self.jobs: dict[str, dict] = {}
         self.lock = threading.Lock()
+        self.agents = AgentService(self)
         self.examples = []
         # Bundled examples stay available when the allowed workspace is broader.
         examples_dir = Path(__file__).resolve().parents[1] / "examples"
@@ -38,6 +44,8 @@ class Application:
                         "payment-service": "Routes, persistence, test gaps, and a documented API mismatch.",
                         "order-workflow": "A finite order state machine with a terminal-state counterexample.",
                         "cyclic-service": "A dependency cycle, a swallowed error, and an untested interface.",
+                        "verified-transfer": "Checked integer theorems, an overdraft counterexample, and a guarded repair.",
+                        "verified-workflow": "A Lean induction proof over every finite event sequence.",
                     }
                     self.examples.append({"name": path.name, "path": str(path),
                                           "description": descriptions.get(path.name, "Example Python repository.")})
@@ -88,6 +96,84 @@ class Application:
 
     def close(self) -> None:
         self.executor.shutdown(wait=True, cancel_futures=True)
+        self.proof_executor.shutdown(wait=True, cancel_futures=True)
+
+    def submit_verification(self, identifier: str) -> dict:
+        bundle = self.store.get(identifier)["bundle"]
+        info = checker_info(self.lean)
+        if not info["available"]:
+            raise ValueError(info["error"])
+        with self.lock:
+            if self._proof_busy():
+                raise ValueError("A proof check is already running; wait for it to finish.")
+            job_id = "job_" + secrets.token_hex(8)
+            job = {"id": job_id, "kind": "verification", "status": "queued", "snapshot_id": identifier, "created_at": utc_now()}
+            self.jobs[job_id] = job
+        self.proof_executor.submit(self._verify, job_id, bundle)
+        return dict(job)
+
+    def _proof_busy(self) -> bool:
+        return any(job.get("kind") in {"verification", "attempt"} and job["status"] in {"queued", "running"}
+                   for job in self.jobs.values())
+
+    def submit_attempt(self, snapshot_id: str, payload: dict) -> dict:
+        record, artifact = self.agents.prepare_attempt(snapshot_id, payload)
+        comparable = ("obligation_id", "obligation_sha256", "strategy", "agent", "request_id")
+        with self.lock:
+            try:
+                existing = self.agents.attempt(snapshot_id, record["id"])
+            except KeyError:
+                existing = None
+            pending = next((job for job in self.jobs.values() if job.get("attempt_id") == record["id"]), None)
+            if existing:
+                if any(existing[key] != record[key] for key in comparable):
+                    raise ValueError("request_id was already used for a different attempt.")
+                return {"id": None, "kind": "attempt", "status": "complete", "snapshot_id": snapshot_id,
+                        "attempt_id": record["id"], "result_status": existing["status"], "reused": True}
+            if pending:
+                if any(pending["request"][key] != record[key] for key in comparable):
+                    raise ValueError("request_id was already used for a different attempt.")
+                return {k: v for k, v in pending.items() if k != "request"}
+            if self._proof_busy():
+                raise ValueError("A proof check is already running; wait for it to finish.")
+            info = checker_info(self.lean)
+            if not info["available"]:
+                raise ValueError(info["error"])
+            job_id = "job_" + secrets.token_hex(8)
+            job = {"id": job_id, "kind": "attempt", "status": "queued", "snapshot_id": snapshot_id,
+                   "attempt_id": record["id"], "created_at": utc_now(), "request": record}
+            self.jobs[job_id] = job
+        self.proof_executor.submit(self._attempt, job_id, record, artifact)
+        return {k: v for k, v in job.items() if k != "request"}
+
+    def _attempt(self, job_id: str, record: dict, artifact: dict) -> None:
+        with self.lock:
+            self.jobs[job_id]["status"] = "running"
+        try:
+            result = self.agents.execute_attempt(record, artifact)
+            update = {"status": "complete", "result_status": result["status"]}
+        except Exception as error:
+            result = {**record, "status": "error", "error": str(error), "completed_at": utc_now(),
+                      "promoted_to_verification": False}
+            try:
+                self.store.save_agent_record(record["snapshot_id"], "attempts", result)
+            except Exception:
+                pass
+            update = {"status": "failed", "error": str(error)}
+        with self.lock:
+            self.jobs[job_id].update(update)
+
+    def _verify(self, job_id: str, bundle: dict) -> None:
+        with self.lock:
+            self.jobs[job_id]["status"] = "running"
+        try:
+            report = verify_bundle(bundle, self.lean, self.store.path / "proof-runs")
+            self.store.save_verification(bundle["id"], report)
+            update = {"status": "complete", "summary": report["summary"]}
+        except Exception as error:
+            update = {"status": "failed", "error": str(error)}
+        with self.lock:
+            self.jobs[job_id].update(update)
 
 
 def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
@@ -128,6 +214,83 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
             if mutation and not secrets.compare_digest(self.headers.get("X-Codeform-Token", ""), app.token):
                 raise PermissionError("Missing or invalid local request token.")
 
+        def _v1_get(self, path: str, query: dict) -> None:
+            if path == "/api/v1/openapi.json":
+                self._json(200, openapi_document())
+            elif path == "/api/v1/capabilities":
+                self._json(200, app.agents.capabilities())
+            elif path == "/api/v1/snapshots":
+                self._json(200, app.store.list())
+            elif path == "/api/v1/compare":
+                before = app.store.get(query.get("before", [""])[0])["bundle"]
+                after = app.store.get(query.get("after", [""])[0])["bundle"]
+                if before["repository"]["path"] != after["repository"]["path"]:
+                    raise ValueError("Choose snapshots of the same repository.")
+                self._json(200, compare_bundles(before, after))
+            elif path.startswith("/api/v1/jobs/"):
+                with app.lock:
+                    job = app.jobs.get(path.removeprefix("/api/v1/jobs/"))
+                    if not job:
+                        raise KeyError("Job not found.")
+                    self._json(200, {k: v for k, v in job.items() if k != "request"})
+            elif path.startswith("/api/v1/snapshots/"):
+                parts = path.removeprefix("/api/v1/snapshots/").split("/")
+                snapshot_id = parts[0]
+                record = app.store.get(snapshot_id)
+                if len(parts) == 1:
+                    self._json(200, {**record, "annotations": app.store.annotations(snapshot_id),
+                                     "verification": app.store.verification(snapshot_id)})
+                elif len(parts) == 2:
+                    endpoint = parts[1]
+                    if endpoint == "sources":
+                        start = int(query["line_start"][0]) if "line_start" in query else None
+                        end = int(query["line_end"][0]) if "line_end" in query else None
+                        result = app.agents.source(snapshot_id, query.get("path", [""])[0], start, end)
+                    elif endpoint == "context":
+                        result = app.agents.context(snapshot_id)
+                    elif endpoint == "obligations":
+                        result = app.agents.obligations(snapshot_id)
+                    elif endpoint == "attempts":
+                        result = app.agents.attempts(snapshot_id)
+                    elif endpoint == "proposals":
+                        result = app.agents.proposals(snapshot_id)
+                    elif endpoint == "verification":
+                        result = app.store.verification(snapshot_id)
+                    else:
+                        raise KeyError("Endpoint not found.")
+                    self._json(200, result)
+                elif len(parts) == 3 and parts[1] == "attempts":
+                    self._json(200, app.agents.attempt(snapshot_id, parts[2]))
+                elif len(parts) == 4 and parts[1] == "proposals" and parts[3] == "reviews":
+                    self._json(200, app.agents.reviews(snapshot_id, parts[2]))
+                else:
+                    raise KeyError("Endpoint not found.")
+            else:
+                raise KeyError("Endpoint not found.")
+
+        def _v1_post(self, path: str, payload: dict) -> None:
+            if path == "/api/v1/snapshots":
+                if set(payload) != {"path"}:
+                    raise ValueError("Repository analysis requires only path.")
+                self._json(202, app.submit(payload["path"]))
+            elif path.startswith("/api/v1/snapshots/"):
+                parts = path.removeprefix("/api/v1/snapshots/").split("/")
+                snapshot_id = parts[0]
+                if len(parts) == 2 and parts[1] == "attempts":
+                    self._json(202, app.submit_attempt(snapshot_id, payload))
+                elif len(parts) == 2 and parts[1] == "proposals":
+                    self._json(201, app.agents.save_proposal(snapshot_id, payload))
+                elif len(parts) == 2 and parts[1] == "verify":
+                    if payload:
+                        raise ValueError("Full verification requires an empty object.")
+                    self._json(202, app.submit_verification(snapshot_id))
+                elif len(parts) == 4 and parts[1] == "proposals" and parts[3] == "reviews":
+                    self._json(201, app.agents.review_proposal(snapshot_id, parts[2], payload))
+                else:
+                    raise KeyError("Endpoint not found.")
+            else:
+                raise KeyError("Endpoint not found.")
+
         def do_GET(self):
             try:
                 self._guard()
@@ -136,14 +299,17 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                 static = {"/": ("index.html", "text/html; charset=utf-8"),
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                           "/style.css": ("style.css", "text/css; charset=utf-8")}
-                if path in static:
+                if path.startswith("/api/v1/"):
+                    self._v1_get(path, query)
+                elif path in static:
                     filename, content_type = static[path]
                     self._send(200, (WEB / filename).read_bytes(), content_type)
                 elif path == "/api/health":
                     self._json(200, {"status": "ok", "version": "0.1.0"})
                 elif path == "/api/bootstrap":
                     self._json(200, {"token": app.token, "workspace": str(app.workspace),
-                                     "examples": app.examples, "snapshots": app.store.list()})
+                                     "examples": app.examples, "snapshots": app.store.list(),
+                                     "proof_checker": checker_info(app.lean)})
                 elif path == "/api/snapshots":
                     self._json(200, app.store.list())
                 elif path.startswith("/api/jobs/"):
@@ -152,7 +318,7 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                         job = app.jobs.get(identifier)
                         if not job:
                             raise KeyError("Analysis job not found.")
-                        self._json(200, dict(job))
+                        self._json(200, {k: v for k, v in job.items() if k != "request"})
                 elif path == "/api/compare":
                     before = app.store.get(query.get("before", [""])[0])["bundle"]
                     after = app.store.get(query.get("after", [""])[0])["bundle"]
@@ -164,7 +330,13 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                     record = app.store.get(parts[0])
                     bundle = record["bundle"]
                     if len(parts) == 1:
-                        self._json(200, {**record, "annotations": app.store.annotations(parts[0])})
+                        self._json(200, {**record, "annotations": app.store.annotations(parts[0]),
+                                         "verification": app.store.verification(parts[0]),
+                                         "proof_plan": proof_plan(bundle),
+                                         "agent_work": {"attempts": app.agents.attempts(parts[0]),
+                                                        "proposals": app.agents.proposals(parts[0])}})
+                    elif len(parts) == 2 and parts[1] == "verification":
+                        self._json(200, app.store.verification(parts[0]))
                     elif len(parts) == 2 and parts[1] == "export":
                         kind = query.get("format", ["json"])[0]
                         if kind == "json":
@@ -201,7 +373,9 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                 if not isinstance(payload, dict):
                     raise ValueError("Expected a JSON object.")
                 path = urlparse(self.path).path
-                if path == "/api/analyze":
+                if path.startswith("/api/v1/"):
+                    self._v1_post(path, payload)
+                elif path == "/api/analyze":
                     self._json(202, app.submit(payload.get("path", "")))
                 elif path == "/api/import":
                     bundle = payload.get("bundle")
@@ -219,6 +393,8 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                     elif parts[1] == "tasks":
                         bundle = app.store.get(parts[0])["bundle"]
                         self._json(200, task_spec(bundle, payload.get("finding_id", ""), app.store.annotations(parts[0])))
+                    elif parts[1] == "verify":
+                        self._json(202, app.submit_verification(parts[0]))
                     else:
                         raise KeyError("Endpoint not found.")
                 else:

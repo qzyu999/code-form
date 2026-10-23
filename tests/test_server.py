@@ -8,6 +8,7 @@ from urllib.request import Request, urlopen
 
 from codeform.analyzer import analyze_repository
 from codeform.server import Application, make_server
+from codeform.proofs import checker_info, find_lean
 from workspace import TemporaryWorkspace
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -48,7 +49,7 @@ class ServerTests(unittest.TestCase):
     def test_full_analysis_review_export_import_journey(self):
         status, bootstrap = self.request("/api/bootstrap")
         self.assertEqual(200, status)
-        self.assertEqual(3, len(bootstrap["examples"]))
+        self.assertEqual(5, len(bootstrap["examples"]))
         status, job = self.request("/api/analyze", {"path": "examples/order-workflow"})
         self.assertEqual(202, status)
         for _ in range(100):
@@ -90,6 +91,23 @@ class ServerTests(unittest.TestCase):
         for path in ("/", "/app.js", "/style.css", "/api/health"):
             self.assertEqual(200, self.request(path)[0])
         self.assertEqual(404, self.request("/../../README.md")[0])
+
+    @unittest.skipUnless(checker_info(find_lean())["available"], "Pinned Lean is optional.")
+    def test_ui_verification_job_checks_and_persists_real_proofs(self):
+        bundle = analyze_repository(ROOT / "examples/verified-workflow")
+        self.app.store.save(bundle)
+        status, job = self.request(f"/api/snapshots/{bundle['id']}/verify", {})
+        self.assertEqual(202, status)
+        for _ in range(200):
+            _, result = self.request(f"/api/jobs/{job['id']}")
+            if result["status"] in {"complete", "failed"}:
+                break
+            time.sleep(.05)
+        self.assertEqual("complete", result["status"])
+        _, report = self.request(f"/api/snapshots/{bundle['id']}/verification")
+        self.assertEqual(1, report["summary"]["proved"])
+        _, record = self.request(f"/api/snapshots/{bundle['id']}")
+        self.assertEqual(bundle["id"], record["verification"]["snapshot_id"])
 
 
 if __name__ == "__main__":

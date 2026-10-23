@@ -24,3 +24,24 @@ jobs:
         with:
           node-version: "20"
       - run: node --check codeform/web/app.js
+  lean-proofs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.14"
+      - name: Create local virtual environment
+        run: python -m venv --without-pip .venv
+      - name: Install pinned local Lean
+        run: |
+          mkdir -p .codeform/tools
+          curl --fail --location --retry 3 --output .codeform/lean.tar.zst https://github.com/leanprover/lean4/releases/download/v4.19.0/lean-4.19.0-linux.tar.zst
+          tar --zstd -xf .codeform/lean.tar.zst -C .codeform/tools
+          echo "$PWD/.codeform/tools/lean-4.19.0-linux/bin" >> "$GITHUB_PATH"
+      - name: Check pinned toolchain and real proofs
+        run: |
+          lean --version
+          .venv/bin/python -c "from codeform.proofs import checker_info,find_lean; assert checker_info(find_lean())['available']"
+          .venv/bin/python -m unittest discover -s tests -p test_proofs.py -v
+          .venv/bin/python -m unittest discover -s tests -p test_agent_api.py -v

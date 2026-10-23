@@ -8,6 +8,8 @@ from .analyzer import analyze_repository
 from .model import compare_bundles, report_markdown, validate_bundle
 from .server import Application, make_server
 from .store import Store
+from .proofs import find_lean, verify_bundle
+from .client import CodeFormClient, ApiError
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -23,14 +25,82 @@ def main(argv: list[str] | None = None) -> int:
     serve.add_argument("--data-dir", type=Path, help="Snapshot/review storage; defaults to <workspace>/.codeform.")
     serve.add_argument("--port", type=int, default=7331, help="Loopback HTTP port; 0 chooses an available port (default: 7331).")
     serve.add_argument("--demo", action="store_true", help="Analyze all bundled example repositories on startup.")
+    serve.add_argument("--lean", type=Path, help="Pinned Lean 4.19.0 executable for the proof checker.")
+    verify = commands.add_parser("verify", help="Check generated transfer/workflow proofs with pinned Lean.")
+    verify.add_argument("repository", nargs="?", default=".")
+    verify.add_argument("--store", type=Path, default=Path(".codeform"))
+    verify.add_argument("--output", "-o", type=Path, default=Path(".codeform/verification.json"))
+    verify.add_argument("--lean", type=Path)
     compare = commands.add_parser("compare", help="Compare two exported bundle JSON files.")
     compare.add_argument("before", type=Path)
     compare.add_argument("after", type=Path)
     validate = commands.add_parser("validate", help="Validate a bundle's schema, references, hashes, and evidence ranges.")
     validate.add_argument("bundle", type=Path)
+    api = commands.add_parser("api", help="Call the running v1 agent API; no model credentials required.")
+    api.add_argument("--url", default="http://127.0.0.1:7332")
+    actions = api.add_subparsers(dest="api_action", required=True)
+    actions.add_parser("capabilities", help="Show available tools and limits.")
+    actions.add_parser("snapshots", help="List saved snapshots.")
+    api_analyze = actions.add_parser("analyze", help="Queue analysis through the service.")
+    api_analyze.add_argument("path")
+    api_analyze.add_argument("--wait", action="store_true")
+    for action in ("snapshot", "context", "obligations", "attempts", "proposals"):
+        command = actions.add_parser(action)
+        command.add_argument("snapshot_id")
+    source = actions.add_parser("source", help="Read captured evidence.")
+    source.add_argument("snapshot_id")
+    source.add_argument("path")
+    source.add_argument("--start", type=int)
+    source.add_argument("--end", type=int)
+    attempt = actions.add_parser("attempt", help="Try a controlled strategy against the exact goal.")
+    attempt.add_argument("snapshot_id")
+    attempt.add_argument("obligation_id")
+    attempt.add_argument("--strategy", choices=("generated", "simplify", "decide"), default="generated")
+    attempt.add_argument("--agent", default="CLI agent")
+    attempt.add_argument("--request-id")
+    attempt.add_argument("--wait", action="store_true")
+    proposal = actions.add_parser("propose", help="Save an evidence-linked draft from a JSON file.")
+    proposal.add_argument("snapshot_id")
+    proposal.add_argument("--file", type=Path, required=True)
+    review = actions.add_parser("review", help="Record a separate proposal review.")
+    review.add_argument("snapshot_id")
+    review.add_argument("proposal_id")
+    review.add_argument("--decision", choices=("accepted", "rejected", "needs_changes"), required=True)
+    review.add_argument("--note", required=True)
+    review.add_argument("--reviewer", required=True)
     args = parser.parse_args(argv)
     try:
-        if args.command == "analyze":
+        if args.command == "api":
+            client = CodeFormClient(args.url)
+            action = args.api_action
+            if action in {"capabilities", "snapshots"}:
+                result = getattr(client, action)()
+            elif action == "analyze":
+                result = client.analyze(args.path)
+                if args.wait:
+                    result = client.wait(result)
+            elif action in {"snapshot", "context", "obligations", "attempts", "proposals"}:
+                result = getattr(client, action)(args.snapshot_id)
+            elif action == "source":
+                result = client.source(args.snapshot_id, args.path, args.start, args.end)
+            elif action == "attempt":
+                obligation = next((o for o in client.obligations(args.snapshot_id)["obligations"]
+                                   if o["id"] == args.obligation_id), None)
+                if obligation is None:
+                    raise ValueError("Obligation not found in this snapshot.")
+                result = client.submit_attempt(args.snapshot_id, obligation, args.strategy, args.agent, args.request_id)
+                if args.wait:
+                    job = client.wait(result)
+                    result = client.attempt(args.snapshot_id, job["attempt_id"])
+            elif action == "propose":
+                payload = json.loads(args.file.read_text(encoding="utf-8"))
+                if not isinstance(payload, dict):
+                    raise ValueError("Proposal file must contain a JSON object.")
+                result = client.propose(args.snapshot_id, payload)
+            elif action == "review":
+                result = client.review(args.snapshot_id, args.proposal_id, args.decision, args.note, args.reviewer)
+            print(json.dumps(result, indent=2, ensure_ascii=False))
+        elif args.command == "analyze":
             bundle = analyze_repository(args.repository)
             Store(args.store).save(bundle)
             if args.output:
@@ -49,7 +119,7 @@ def main(argv: list[str] | None = None) -> int:
         elif args.command == "serve":
             if not 0 <= args.port <= 65535:
                 raise ValueError("Port must be between 0 and 65535.")
-            app = Application(args.workspace, args.data_dir)
+            app = Application(args.workspace, args.data_dir, args.lean)
             try:
                 if args.demo:
                     app.seed_examples()
@@ -73,6 +143,20 @@ def main(argv: list[str] | None = None) -> int:
             for bundle in bundles:
                 validate_bundle(bundle)
             print(json.dumps(compare_bundles(*bundles), indent=2, ensure_ascii=False))
+        elif args.command == "verify":
+            bundle = analyze_repository(args.repository)
+            store = Store(args.store)
+            store.save(bundle)
+            report = verify_bundle(bundle, find_lean(args.lean), store.path / "proof-runs")
+            store.save_verification(bundle["id"], report)
+            args.output.parent.mkdir(parents=True, exist_ok=True)
+            args.output.write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+            print(f"Verification: {report['summary']}")
+            print(f"Snapshot: {bundle['id']}\nReport: {args.output.resolve()}")
+            if not report["artifacts"] or any(report["summary"][key] for key in ("unsupported", "not_run", "error", "timeout")):
+                return 1
+            if report["summary"]["disproved"]:
+                return 2
         return 0
-    except (ValueError, OSError, KeyError) as error:
+    except (ValueError, OSError, KeyError, ApiError, RuntimeError) as error:
         parser.exit(1, f"code-form: {error}\n")

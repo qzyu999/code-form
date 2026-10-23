@@ -28,8 +28,8 @@ const icons = {
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.file}</svg>`;
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const badge = (value) => `<span class="badge ${esc(value)}">${esc(value)}</span>`;
-const state = { view: "overview", snapshots: [], examples: [], record: null, token: "", workspace: "", search: "", severity: "all", status: "all", graphKind: "imports", selectedComponent: null, busy: false, diff: null, error: "", drawer: null };
-const titles = { overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", compare: "Snapshot comparison" };
+const state = { view: "overview", snapshots: [], examples: [], record: null, token: "", workspace: "", search: "", severity: "all", status: "all", graphKind: "imports", selectedComponent: null, busy: false, proofBusy: false, diff: null, error: "", drawer: null, proof_checker: null };
+const titles = { overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", agents: "Agent workspace", compare: "Snapshot comparison" };
 let toastTimer, lastFocus;
 
 async function api(path, payload) {
@@ -65,7 +65,7 @@ function notice(text) { return `<div class="notice">${icon("info")}<span>${esc(t
 
 function shell(content) {
   const findings = state.record?.bundle.summary.findings;
-  const nav = [["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["compare", "compare", "Compare"]];
+  const nav = [["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["agents", "code", "Agent workspace"], ["compare", "compare", "Compare"]];
   return `<div class="app-shell"><aside class="sidebar">
     <a class="brand" href="/" aria-label="code-form home"><span class="brand-mark">${icon("cube")}</span><span class="brand-name">code-form<span class="muted">.</span></span></a>
     <div class="workspace-label">SYSTEM EXPLORER</div>
@@ -85,6 +85,8 @@ function header() {
     claims: "What the system model says, how it knows, and where the evidence lives.",
     findings: "Prioritized questions and concrete counterexamples for your next review.",
     behavior: "Explore call flows, explicit state machines, and carefully bounded properties.",
+    proofs: "Given these assumptions, these conclusions follow. Inspect the mathematics and its proof evidence.",
+    agents: "Review evidence-linked proposals and immutable checker attempts from external agents.",
     compare: "See what changed in the code and its evidence-linked model.",
   };
   const id = state.record?.bundle.id;
@@ -157,6 +159,7 @@ function overview() {
     <div class="section-heading"><div><h2>A model you can verify</h2><p>Every statement links to a captured source location.</p></div><button class="text-link" data-view="claims">Explore claim ledger ${icon("arrow")}</button></div>
     <div class="panel table-scroll"><table class="table"><thead><tr><th>Claim</th><th>Status</th><th>Evidence</th><th></th></tr></thead><tbody>
       ${claims.map(c => claimRow(c)).join("")}</tbody></table></div>
+    ${state.record.proof_plan?.length ? `<div class="notice">${icon("shield")}<span>This repository has mathematical obligations. <button class="text-link" data-view="proofs">Explore assumptions, checked proofs, and counterexamples ${icon("arrow")}</button></span></div>` : ""}
     ${notice("A test reference means a test calls an interface. It does not mean the test passed or that the interface is fully covered. Analyze, inspect, then validate.")}`;
 }
 function claimRow(c) {
@@ -215,6 +218,43 @@ function behavior() {
     <div class="section-heading"><h2>Assumptions & open questions</h2></div><div class="panel">${bundle.assumptions.map(a => `<div class="assumption"><button data-assumption="${a.id}"><p><strong>${esc(a.statement)}</strong> ${badge(a.status)}</p><p>${esc(a.rationale)}</p></button></div>`).join("")}${bundle.open_questions.map(q => `<div class="assumption"><p>${icon("info")} ${esc(q)}</p></div>`).join("")}</div>
     ${notice("A bounded check can establish a property of an extracted finite table. Connecting that table to production behavior requires its own tests or refinement argument. Lean candidates are never marked proved.")}`;
 }
+function proofs() {
+  const report = state.record.verification;
+  const artifacts = report?.artifacts || state.record.proof_plan || [];
+  const summary = report?.summary;
+  const checker = state.proof_checker;
+  return `<div class="proof-intro panel padded"><div><div class="eyebrow">Mathematical reasoning</div><h2>Assumptions → definitions → checked conclusions</h2><p class="model-note">Proofs are tied to this snapshot. Each result states what it establishes, how it was checked, and which assumptions remain.</p></div><div class="proof-actions"><button class="btn primary" data-action="verify" ${state.proofBusy || !checker?.available || !artifacts.length ? "disabled" : ""}>${icon("shield")}${state.proofBusy ? "Checking with Lean…" : "Check proofs with Lean"}</button>${report ? `<button class="btn" data-action="proof-report">${icon("download")}Export proof report</button>` : ""}<span class="model-note">${checker?.available ? `Local Lean ${esc(checker.version)}` : esc(checker?.error || "Lean unavailable")}</span></div></div>
+    ${state.proofBusy ? '<div class="progress-panel"><span class="loading-pulse"></span>Lean is checking complete proofs and their transitive axiom dependencies…</div>' : ""}
+    ${summary ? `<div class="metrics">${[["proved", "Checked conclusions"], ["disproved", "Checked counterexamples"], ["unsupported", "Unsupported obligations"], ["error", "Checker errors"]].map(([key, label]) => `<div class="metric"><div class="metric-label">${icon(key === "proved" ? "shield" : "info")}${label}</div><div class="metric-value">${summary[key]}</div><div class="metric-detail">${key === "proved" ? "Accepted by Lean under the stated scope" : key === "disproved" ? "Concrete witness accepted by Lean" : "No correctness conclusion established"}</div></div>`).join("")}</div>` : ""}
+    ${!artifacts.length ? `<div class="panel empty"><h3>No supported proof obligations in this snapshot</h3><p>Analyze verified-transfer for integer theorems and a repair comparison,<br>or verified-workflow for induction over every finite event sequence.</p><button class="btn" data-action="new">${icon("plus")}Analyze a proof example</button></div>` : `<div class="proof-artifacts">${artifacts.map(proofCard).join("")}</div>`}
+    ${notice("Lean checks the emitted mathematical model. The source adapter is a stated trusted boundary; arbitrary Python, persistence, concurrent updates, and runtime type enforcement are outside these proofs.")}`;
+}
+function proofCard(artifact) {
+  if (artifact.status === "unsupported") return `<article class="panel padded"><div class="section-heading"><h2>${esc(artifact.name)}</h2>${badge("unsupported")}</div><p class="model-note">${esc(artifact.reason)}</p></article>`;
+  const checked = ["proved", "disproved"].includes(artifact.status);
+  const dependencyNames = artifact.dependencies.map(id => (state.record.verification?.artifacts || state.record.proof_plan).find(a => a.id === id)?.property || id);
+  return `<article class="panel proof-card" id="${artifact.id}"><div class="panel-header"><div><div class="eyebrow">${esc(artifact.name)} · ${esc(artifact.property)}</div><h2>${esc(artifact.statement)}</h2></div>${badge(artifact.status)}</div><div class="padded">
+    <div class="math-formula">${esc(artifact.formula)}</div><div class="proof-scope">${icon("info")}Scope: ${esc(artifact.scope.replaceAll("-", " "))}</div>
+    <div class="proof-columns"><div><h3>Given these assumptions</h3><div class="proof-assumptions">${artifact.assumptions.map(a => `<div class="proof-assumption"><span>${esc(a.kind)}</span><p>${esc(a.statement)}</p></div>`).join("")}</div><p class="model-note"><strong>Feasibility: ${esc(artifact.feasibility.status)}</strong><br>${esc(artifact.feasibility.note)}</p></div>
+    <div><h3>${artifact.status === "disproved" ? "This conclusion fails" : "How the conclusion follows"}</h3><ol class="proof-steps">${artifact.reasoning.map(s => `<li><strong>${esc(s.title)}</strong><p>${esc(s.detail)}</p></li>`).join("")}</ol>
+    ${dependencyNames.length ? `<div class="dependency-links"><span>Composes checked lemmas:</span>${artifact.dependencies.map((id, i) => `<a href="#${id}" data-proof-dependency="${id}">${esc(dependencyNames[i])}</a>`).join("")}</div>` : ""}
+    ${artifact.counterexample ? `<div class="counterexample"><strong>${artifact.counterexample.checked ? "Lean-checked counterexample" : "Candidate counterexample"}</strong><div class="mono">Input: ${esc(JSON.stringify(artifact.counterexample.inputs))}<br>Output: ${esc(JSON.stringify(artifact.counterexample.output))}</div>${esc(artifact.counterexample.violated)}</div>${artifact.repair ? `<div class="repair-proposal"><h3>Proposed repair</h3><p class="model-note">${esc(artifact.repair.description)}</p>${artifact.repair.replacement ? `<pre>${esc(artifact.repair.replacement)}</pre>` : ""}<p class="model-note">${esc(artifact.repair.status)}${artifact.repair.reference_implementation ? `<br>Compare with ${esc(artifact.repair.reference_implementation)} in this snapshot.` : ""}</p></div>` : ""}` : ""}</div></div>
+    <div class="proof-evidence-bar">${artifact.evidence.map(e => {
+      const comp = state.record.bundle.components.find(c => c.path === e.reference && c.line_start === e.line_start && c.line_end === e.line_end);
+      return comp ? `<button class="btn small" data-source-component="${comp.id}">${icon("code")}${esc(e.reference)}:${e.line_start}</button>` : `<span class="mono">${esc(e.reference)}</span>`;
+    }).join("")}<span class="evidence-strength">Captured source → ${esc(artifact.semantics)}</span></div>
+    <details class="proof-details"><summary>Inspect Lean proof and axiom dependencies ${checked ? "· checked" : "· not established"}</summary><div class="axiom-ledger"><strong>Transitive axiom dependencies</strong><p>${checked ? artifact.axioms.length ? artifact.axioms.map(a => `<code>${esc(a)}</code>`).join(" ") : "None — Lean reports no axiom dependencies for this theorem." : "No accepted proof result yet."}</p><p class="model-note">Foundational axioms belong to the proof logic. Business requirements remain obligations, not added axioms.</p></div><pre class="lean-preview">${esc(artifact.lean_source)}</pre><button class="btn small" data-proof-download="${artifact.id}">${icon("download")}Download checked input</button>${artifact.checker ? `<div class="checker-record"><strong>${esc(artifact.checker.version)}</strong><p class="model-note">Exit code ${artifact.checker.exit_code} · source ${artifact.checker.source_sha256.slice(0, 16)}<br>${esc(artifact.checker.trust)}</p><pre>${esc(artifact.checker.stdout)}</pre></div>` : ""}${artifact.error ? `<p class="error-message">${esc(artifact.error)}</p>` : ""}</details></div></article>`;
+}
+function agentWorkspace() {
+  const work = state.record.agent_work || { attempts: [], proposals: [] };
+  const id = state.record.bundle.id;
+  return `<div class="panel padded"><div class="section-heading"><div><h2>One API for reasoning tools</h2><p>External agents inspect evidence, choose proof strategies, and submit drafts for review.</p></div><button class="btn" data-action="refresh-agents">${icon("refresh")}Refresh agent work</button></div><div class="agent-links"><a href="/api/v1/openapi.json" target="_blank" rel="noopener">OpenAPI contract ${icon("arrow")}</a><a href="/api/v1/snapshots/${id}/context" target="_blank" rel="noopener">Agent context ${icon("arrow")}</a><a href="/api/v1/snapshots/${id}/obligations" target="_blank" rel="noopener">Fixed obligations ${icon("arrow")}</a></div><p class="model-note">The agent supplies reasoning. The server owns the source snapshot, exact theorem statements, checker execution, and review history.</p></div>
+    <div class="section-heading agent-section"><h2>Proof attempts · ${work.attempts.length}</h2></div><div class="panel">
+    ${work.attempts.map(attempt => `<details class="agent-attempt"><summary><span class="mono">${esc(attempt.strategy)}</span> ${badge(attempt.status)}<span>${esc(attempt.statement)}</span><small class="muted">${esc(attempt.agent)}</small></summary><div class="padded"><p class="model-note">Fixed obligation <code>${esc(attempt.obligation_id)}</code><br>Attempt <code>${esc(attempt.id)}</code> · ${timeLabel(attempt.created_at)}<br>${esc(attempt.scope)}</p>${attempt.checker?.stdout ? `<pre class="lean-preview">${esc(attempt.checker.stdout)}</pre>` : ""}${attempt.error ? `<p class="error-message">${esc(attempt.error)}</p>` : ""}<p class="model-note">This attempt is recorded separately from the complete snapshot verification report.</p></div></details>`).join("") || '<div class="empty">No agent proof attempts yet. Use the API client or CLI to submit a strategy against a fixed obligation.</div>'}</div>
+    <div class="section-heading agent-section"><h2>Proposals · ${work.proposals.length}</h2></div><div class="proof-artifacts">
+    ${work.proposals.map(proposal => `<article class="panel"><div class="panel-header"><div><div class="eyebrow">${esc(proposal.kind)} · ${esc(proposal.agent)}</div><h2>${esc(proposal.title)}</h2></div>${badge(proposal.review?.decision === "rejected" ? "dismissed" : proposal.review?.decision === "accepted" ? "accepted" : "proposed")}</div><div class="padded"><h3>Rationale</h3><p class="model-note">${esc(proposal.rationale)}</p><h3>Proposed content</h3><pre class="proposal-content">${esc(proposal.content)}</pre><div class="proof-evidence-bar">${proposal.evidence.map(e => `<span class="evidence-link">${esc(e.path)}:${e.line_start}–${e.line_end}</span>`).join("")}</div><p class="model-note">Draft proposal · ${timeLabel(proposal.created_at)} · checked: false · applied: false</p>${proposal.review ? `<div class="notice"><div>Latest review: <strong>${esc(proposal.review.decision)}</strong> by ${esc(proposal.review.reviewer)}<p class="proposal-review-note">${esc(proposal.review.note)}</p></div></div>` : ""}<form class="proposal-review" data-proposal="${proposal.id}"><div class="field"><label for="decision-${proposal.id}">Review decision</label><select id="decision-${proposal.id}" name="decision"><option value="accepted">Accept intent</option><option value="needs_changes">Request changes</option><option value="rejected">Reject</option></select></div><div class="field"><label for="note-${proposal.id}">Review reasoning</label><textarea id="note-${proposal.id}" name="note" required maxlength="4000" placeholder="Record requirements, validation needed, or why this proposal should change…"></textarea></div><button class="btn primary small" type="submit">${icon("check")}Save proposal review</button></form></div></article>`).join("") || '<div class="panel empty">No proposals yet. Agents can save requirements, contract drafts, explanations, and repair suggestions with captured-source evidence.</div>'}</div>
+    ${notice("Accepting a proposal records intent and review reasoning. It does not prove a theorem, alter a checked contract, apply a patch, or run target code.")}`;
+}
 function compareView() {
   const snapshots = state.snapshots.filter(s => s.repository.path === state.record.bundle.repository.path);
   const options = snapshots.map(s => `<option value="${s.id}">${timeLabel(s.created_at)} · ${esc(s.repository.commit_sha?.slice(0, 8) || s.repository.content_sha256.slice(0, 8))}</option>`).join("");
@@ -231,7 +271,7 @@ function render() {
   const content = !state.record ? welcome() : header() + snapshotBar() + (state.busy ? '<div class="progress-panel"><span class="loading-pulse"></span>Parsing repository and linking evidence…</div>' : "") + ({
     overview, architecture, claims: () => toolbar("claims") + notice("Epistemic status describes the kind of support, not a confidence score. Observed source, proposed behavior, test results, and checked proofs are different claims."),
     findings: () => toolbar("findings") + notice("Accept a finding to export a bounded task specification with evidence and acceptance criteria. Review notes do not alter the original analysis."),
-    behavior, compare: compareView,
+    behavior, proofs, agents: agentWorkspace, compare: compareView,
   }[state.view] || overview)();
   document.getElementById("app").innerHTML = shell(content);
   document.title = `code-form — ${state.record ? repoName() + " / " + titles[state.view] : "System explorer"}`;
@@ -335,6 +375,35 @@ document.addEventListener("click", async event => {
   if (!target) return;
   try {
     if (target.dataset.view) navigate(target.dataset.view);
+    else if (target.dataset.action === "refresh-agents") {
+      state.record = await api(`/api/snapshots/${state.record.bundle.id}`);
+      render();
+      toast("Agent work refreshed from the local API.");
+    }
+    else if (target.dataset.action === "verify") {
+      if (state.proofBusy) return;
+      const snapshot = state.record.bundle.id;
+      state.proofBusy = true; render();
+      try {
+        let job = await api(`/api/snapshots/${snapshot}/verify`, {});
+        while (["queued", "running"].includes(job.status)) {
+          await new Promise(resolve => setTimeout(resolve, 450));
+          job = await api(`/api/jobs/${job.id}`);
+        }
+        if (job.status !== "complete") throw new Error(job.error || "Proof check failed.");
+        if (state.record.bundle.id === snapshot) state.record = await api(`/api/snapshots/${snapshot}`);
+        toast(`Lean checked ${job.summary.proved} conclusions and ${job.summary.disproved} counterexamples.`);
+      } finally { state.proofBusy = false; render(); }
+    }
+    else if (target.dataset.action === "proof-report") download(`${state.record.verification.id}.json`, JSON.stringify(state.record.verification, null, 2));
+    else if (target.dataset.proofDownload) {
+      const artifact = (state.record.verification?.artifacts || state.record.proof_plan).find(a => a.id === target.dataset.proofDownload);
+      download(`${artifact.id}.lean`, artifact.lean_source, "text/plain");
+    }
+    else if (target.dataset.proofDependency) {
+      event.preventDefault();
+      document.getElementById(target.dataset.proofDependency)?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }
     else if (target.dataset.action === "new") analyzeModal();
     else if (target.dataset.action === "close" || target.dataset.dismiss) {
       if (target.dataset.dismiss && event.target !== target) return;
@@ -398,6 +467,15 @@ document.addEventListener("submit", async event => {
       render();
       showDrawer(drawer.kind, drawer.id, drawer.evidenceIndex);
       toast("Review saved to this snapshot.");
+    }
+    else if (event.target.matches(".proposal-review")) {
+      const form = event.target;
+      await api(`/api/v1/snapshots/${state.record.bundle.id}/proposals/${form.dataset.proposal}/reviews`, {
+        decision: form.elements.decision.value, note: form.elements.note.value, reviewer: "local reviewer",
+      });
+      state.record = await api(`/api/snapshots/${state.record.bundle.id}`);
+      render();
+      toast("Proposal review saved. The draft and original evidence remain intact.");
     }
   } catch (error) { toast(error.message); }
 });
