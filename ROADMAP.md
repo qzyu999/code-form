@@ -10,6 +10,12 @@ Python subset. See [the design and acceptance criteria](docs/formal-verification
 Existing structural analysis supports this work; UI expansion is secondary.
 Track implementation in [issue #2](https://github.com/qzyu999/code-form/issues/2).
 
+The first human-facing step is now a
+[math-first walkthrough](docs/math-first-walkthrough.md), tracked in
+[issue #4](https://github.com/qzyu999/code-form/issues/4). Its first slice uses
+supported adapter models and documented requirements rather than inventing
+general mathematical semantics.
+
 - [ ] Define reviewed contracts, environment assumptions, and explicit normal/exceptional semantics.
 - [ ] Connect captured supported Python source to a versioned semantic representation with a stated trust boundary.
 - [ ] Check assumption feasibility and generate symbolic verification obligations.

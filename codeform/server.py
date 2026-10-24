@@ -1,6 +1,7 @@
 """Loopback-only HTTP application with a bounded read-only analysis queue."""
 
 import json
+import re
 import secrets
 import threading
 from concurrent.futures import ThreadPoolExecutor
@@ -14,6 +15,7 @@ from .store import Store, task_spec, utc_now
 from .proofs import checker_info, find_lean, proof_plan, verify_bundle
 from .agent_api import AgentService
 from .api_spec import openapi_document
+from .walkthrough import build_walkthrough, simulate_scenario
 
 WEB = Path(__file__).parent / "web"
 MAX_REQUEST_BYTES = 20_000_000
@@ -194,6 +196,7 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
             self.send_header("Referrer-Policy", "no-referrer")
             self.send_header("Content-Security-Policy",
                              "default-src 'self'; script-src 'self'; style-src 'self'; "
+                             "style-src-attr 'unsafe-inline'; font-src 'self'; "
                              "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
             if filename:
                 self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
@@ -256,6 +259,8 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                         result = app.agents.proposals(snapshot_id)
                     elif endpoint == "verification":
                         result = app.store.verification(snapshot_id)
+                    elif endpoint == "walkthrough":
+                        result = build_walkthrough(record["bundle"], app.store.verification(snapshot_id))
                     else:
                         raise KeyError("Endpoint not found.")
                     self._json(200, result)
@@ -284,6 +289,9 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                     if payload:
                         raise ValueError("Full verification requires an empty object.")
                     self._json(202, app.submit_verification(snapshot_id))
+                elif len(parts) == 2 and parts[1] == "scenarios":
+                    bundle = app.store.get(snapshot_id)["bundle"]
+                    self._json(200, simulate_scenario(bundle, payload))
                 elif len(parts) == 4 and parts[1] == "proposals" and parts[3] == "reviews":
                     self._json(201, app.agents.review_proposal(snapshot_id, parts[2], payload))
                 else:
@@ -298,12 +306,27 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                 path, query = parsed.path, parse_qs(parsed.query)
                 static = {"/": ("index.html", "text/html; charset=utf-8"),
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
+                          "/math.js": ("math.js", "text/javascript; charset=utf-8"),
+                          "/walkthrough.js": ("walkthrough.js", "text/javascript; charset=utf-8"),
                           "/style.css": ("style.css", "text/css; charset=utf-8")}
                 if path.startswith("/api/v1/"):
                     self._v1_get(path, query)
                 elif path in static:
                     filename, content_type = static[path]
                     self._send(200, (WEB / filename).read_bytes(), content_type)
+                elif path.startswith("/vendor/katex/"):
+                    relative = path.removeprefix("/vendor/katex/")
+                    types = {"katex.min.js": "text/javascript; charset=utf-8", "katex.min.css": "text/css; charset=utf-8"}
+                    if relative in types:
+                        target, kind = WEB / "vendor/katex" / relative, types[relative]
+                    elif re.fullmatch(r"fonts/[A-Za-z0-9_-]+\.(woff2|woff|ttf)", relative):
+                        target = WEB / "vendor/katex" / relative
+                        kind = {".woff2": "font/woff2", ".woff": "font/woff", ".ttf": "font/ttf"}[target.suffix]
+                    else:
+                        raise KeyError("Vendor asset not found.")
+                    if not target.is_file():
+                        raise KeyError("Vendor asset not found.")
+                    self._send(200, target.read_bytes(), kind)
                 elif path == "/api/health":
                     self._json(200, {"status": "ok", "version": "0.1.0"})
                 elif path == "/api/bootstrap":
@@ -333,6 +356,7 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                         self._json(200, {**record, "annotations": app.store.annotations(parts[0]),
                                          "verification": app.store.verification(parts[0]),
                                          "proof_plan": proof_plan(bundle),
+                                         "walkthrough": build_walkthrough(bundle, app.store.verification(parts[0])),
                                          "agent_work": {"attempts": app.agents.attempts(parts[0]),
                                                         "proposals": app.agents.proposals(parts[0])}})
                     elif len(parts) == 2 and parts[1] == "verification":

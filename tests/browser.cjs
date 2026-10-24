@@ -64,7 +64,8 @@ async function main() {
     await page.getByRole("main").getByRole("button", { name: "Analyze repository", exact: true }).click();
     await page.locator("#repository-path").fill(".codeform/browser-fixture");
     await page.getByRole("button", { name: "Build system model" }).click();
-    await page.getByRole("heading", { name: "System overview" }).waitFor();
+    await page.getByRole("heading", { name: "System walkthrough" }).waitFor();
+    await page.locator("[data-view=overview]").first().click();
     await page.getByText("Terminal state can change in workflow", { exact: true }).waitFor();
     const before = await page.locator("#snapshot-select").inputValue();
     await fs.writeFile(path.join(fixture, "workflow.py"), original.replace('    ("cancelled", "reopen"): "pending",\n', ""));

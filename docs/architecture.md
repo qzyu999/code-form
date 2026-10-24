@@ -98,6 +98,20 @@ while retaining the complete model.
 
 This is a local reviewer application, not an authenticated multi-user service.
 
+## Math-first presentation
+
+`codeform/walkthrough.py` builds a deterministic, snapshot-linked walkthrough
+from captured purpose/requirements and the existing supported proof adapters.
+It exposes definitions, notation, intended properties, proof support, model
+examples, and implementation boundaries. It does not infer arbitrary
+mathematical semantics.
+
+`web/walkthrough.js` presents that reading sequence as the default entry point.
+Locally vendored KaTeX renders LaTeX with trust disabled. Model-only scenarios
+run through the v1 API; rejected input and failed hypotheses remain explicit.
+Existing expert views and deep links stay available.
+See [math-first-walkthrough.md](math-first-walkthrough.md).
+
 ## External reasoning API
 
 `codeform/agent_api.py` supplies versioned reasoning context, fixed proof

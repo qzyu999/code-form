@@ -105,6 +105,22 @@ class AgentApiTests(unittest.TestCase):
             self.assertEqual(400, error.exception.status)
         self.assertEqual([], self.client.attempts(self.snapshot))
 
+    def test_walkthrough_and_scenarios_use_captured_models_only(self):
+        report = self.client.walkthrough(self.snapshot)
+        self.assertEqual(self.snapshot, report["snapshot_id"])
+        model = next(m for m in report["models"] if not m["guarded"])
+        example = self.client.scenario(self.snapshot, model["id"], {"source": "10", "destination": "0", "amount": "11"})
+        self.assertEqual(["-1", "11"], example["output"])
+        self.assertFalse(example["proved"])
+        self.assertFalse(example["target_executed"])
+        self.assertEqual(self.bundle, self.client.snapshot(self.snapshot)["bundle"])
+        with self.assertRaises(ApiError) as rejected:
+            self.client.scenario(self.snapshot, model["id"], {"source": 0.1, "destination": "0", "amount": "1"})
+        self.assertEqual(400, rejected.exception.status)
+        with self.assertRaises(ApiError):
+            self.client._request(f"/api/v1/snapshots/{self.snapshot}/scenarios",
+                                 {"model_id": model["id"], "inputs": {}, "execute": True})
+
     def test_versioned_mutations_require_token_and_origin_check(self):
         self.client.token = ""
         with self.assertRaises(ApiError) as error:

@@ -44,7 +44,7 @@ def main(argv: list[str] | None = None) -> int:
     api_analyze = actions.add_parser("analyze", help="Queue analysis through the service.")
     api_analyze.add_argument("path")
     api_analyze.add_argument("--wait", action="store_true")
-    for action in ("snapshot", "context", "obligations", "attempts", "proposals"):
+    for action in ("snapshot", "context", "walkthrough", "obligations", "attempts", "proposals"):
         command = actions.add_parser(action)
         command.add_argument("snapshot_id")
     source = actions.add_parser("source", help="Read captured evidence.")
@@ -79,7 +79,7 @@ def main(argv: list[str] | None = None) -> int:
                 result = client.analyze(args.path)
                 if args.wait:
                     result = client.wait(result)
-            elif action in {"snapshot", "context", "obligations", "attempts", "proposals"}:
+            elif action in {"snapshot", "context", "walkthrough", "obligations", "attempts", "proposals"}:
                 result = getattr(client, action)(args.snapshot_id)
             elif action == "source":
                 result = client.source(args.snapshot_id, args.path, args.start, args.end)

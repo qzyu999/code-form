@@ -69,6 +69,8 @@ does not establish that analysis finished.
 | `GET /api/v1/snapshots/{snapshot_id}` | Captured model, annotations, and latest complete verification. |
 | `GET /api/v1/snapshots/{snapshot_id}/sources?path=...` | Captured source text and hash; optional `line_start`/`line_end`. |
 | `GET /api/v1/snapshots/{snapshot_id}/context` | Versioned agent instructions, assumptions, obligations, and history. |
+| `GET /api/v1/snapshots/{snapshot_id}/walkthrough` | Purpose, notation, mathematical model excerpts, default scenarios, and proof support. |
+| `POST /api/v1/snapshots/{snapshot_id}/scenarios` | Evaluate a captured model example without executing target code or recording a new proof. |
 | `GET /api/v1/snapshots/{snapshot_id}/obligations` | Immutable contexts, declarations, IDs/hashes, proof scope, and reference source. |
 | `POST /api/v1/snapshots/{snapshot_id}/attempts` | Try a controlled strategy against an exact obligation. |
 | `GET /api/v1/snapshots/{snapshot_id}/attempts` | Immutable attempt history, including unsuccessful checks. |
@@ -112,6 +114,8 @@ print(result["status"], result.get("checker", {}).get("stdout"))
 The client exposes discovery, snapshots, analysis, jobs, context, obligations,
 sources, attempts, proposals, complete review history, snapshot comparison,
 and complete verification.
+It also exposes the [math-first walkthrough](math-first-walkthrough.md) and
+model scenario evaluation.
 `ApiError.status` contains a rejected request's HTTP status.
 `wait()` times out after 120 seconds by default; a client timeout does not
 cancel server execution. Poll the same job to inspect it later.

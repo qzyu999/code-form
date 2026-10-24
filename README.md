@@ -42,6 +42,9 @@ python3 -m venv --without-pip .venv
 Open **http://127.0.0.1:7331**. `--demo` analyzes five example repositories
 before startup. Use the snapshot selector to switch examples, or
 **Analyze repository** to choose another Python repository.
+The default **Start here** view presents documented purpose, supported
+mathematical model excerpts, LaTeX notation, scenarios, and Lean/source evidence.
+See [the walkthrough guide](docs/math-first-walkthrough.md).
 
 On Windows, `.\scripts\setup.ps1` creates the environment and
 `.\scripts\start.ps1` starts the demo. Activation and installation are optional.
@@ -66,6 +69,7 @@ To reopen the demo storage used during development, add
 
 | View | Behavior |
 | --- | --- |
+| Start here | Guided purpose → mathematical objects → intended properties → examples → argument → Lean and source. |
 | Overview | Repository metadata, model counts, dependency map, and priority findings. |
 | Architecture | Module imports, resolved calls, direct test references, and component source. |
 | Claim ledger | Search statements, filter epistemic status, and open supporting evidence. |
@@ -216,6 +220,7 @@ flowchart LR
 ```
 
 Read [verification and repair](docs/formal-verification.md),
+[math-first walkthrough](docs/math-first-walkthrough.md),
 [agent API](docs/api.md),
 [operations](docs/operations.md), [implementation architecture](docs/architecture.md),
 [system model](docs/system-model.md), [change policy](docs/agent-safety.md),

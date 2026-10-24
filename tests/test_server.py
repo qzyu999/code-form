@@ -88,9 +88,11 @@ class ServerTests(unittest.TestCase):
         bundle["sources"][0]["content"] = "invalid"
         self.assertEqual(400, self.request("/api/import", {"bundle": bundle})[0])
         self.assertEqual(400, self.request("/api/import", {"bundle": None})[0])
-        for path in ("/", "/app.js", "/style.css", "/api/health"):
+        for path in ("/", "/app.js", "/walkthrough.js", "/math.js", "/style.css",
+                     "/vendor/katex/katex.min.js", "/vendor/katex/katex.min.css", "/api/health"):
             self.assertEqual(200, self.request(path)[0])
         self.assertEqual(404, self.request("/../../README.md")[0])
+        self.assertEqual(404, self.request("/vendor/katex/../../README.md")[0])
 
     @unittest.skipUnless(checker_info(find_lean())["available"], "Pinned Lean is optional.")
     def test_ui_verification_job_checks_and_persists_real_proofs(self):
