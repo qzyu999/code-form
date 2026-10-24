@@ -117,3 +117,9 @@ exact obligation binding, Lean failure/retry, idempotent requests, captured
 evidence validation, proposal reviews, and persisted history. The optional
 `node tests/agents-browser.cjs` checks Agent workspace against a seeded server
 after running `examples/agent_client_demo.py`.
+
+The [math-first walkthrough](math-first-walkthrough.md) has model/API tests
+for exact integer examples, rejection, failed assumptions, workflow events,
+proof-input matching, and unsupported fallback. The optional
+`node tests/walkthrough-browser.cjs` verifies local LaTeX, notation, scenarios,
+Lean/source links, export, and mobile layout against a seeded server.

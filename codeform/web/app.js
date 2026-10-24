@@ -28,8 +28,8 @@ const icons = {
 const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[name] || icons.file}</svg>`;
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const badge = (value) => `<span class="badge ${esc(value)}">${esc(value)}</span>`;
-const state = { view: "overview", snapshots: [], examples: [], record: null, token: "", workspace: "", search: "", severity: "all", status: "all", graphKind: "imports", selectedComponent: null, busy: false, proofBusy: false, diff: null, error: "", drawer: null, proof_checker: null };
-const titles = { overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", agents: "Agent workspace", compare: "Snapshot comparison" };
+const state = { view: "walkthrough", snapshots: [], examples: [], record: null, token: "", workspace: "", search: "", severity: "all", status: "all", graphKind: "imports", selectedComponent: null, busy: false, proofBusy: false, diff: null, error: "", drawer: null, proof_checker: null };
+const titles = { walkthrough: "System walkthrough", overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", agents: "Agent workspace", compare: "Snapshot comparison" };
 let toastTimer, lastFocus;
 
 async function api(path, payload) {
@@ -65,7 +65,7 @@ function notice(text) { return `<div class="notice">${icon("info")}<span>${esc(t
 
 function shell(content) {
   const findings = state.record?.bundle.summary.findings;
-  const nav = [["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["agents", "code", "Agent workspace"], ["compare", "compare", "Compare"]];
+  const nav = [["walkthrough", "activity", "Start here"], ["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["agents", "code", "Agent workspace"], ["compare", "compare", "Compare"]];
   return `<div class="app-shell"><aside class="sidebar">
     <a class="brand" href="/" aria-label="code-form home"><span class="brand-mark">${icon("cube")}</span><span class="brand-name">code-form<span class="muted">.</span></span></a>
     <div class="workspace-label">SYSTEM EXPLORER</div>
@@ -80,6 +80,7 @@ function shell(content) {
 }
 function header() {
   const subtitles = {
+    walkthrough: "Connect purpose, examples, mathematical objects, and the implementation that gives them meaning.",
     overview: "A traceable view of your codebase, from structure to the questions worth asking.",
     architecture: "Follow the dependencies. Inspect the components. Trace relationships to code.",
     claims: "What the system model says, how it knows, and where the evidence lives.",
@@ -233,8 +234,9 @@ function proofCard(artifact) {
   if (artifact.status === "unsupported") return `<article class="panel padded"><div class="section-heading"><h2>${esc(artifact.name)}</h2>${badge("unsupported")}</div><p class="model-note">${esc(artifact.reason)}</p></article>`;
   const checked = ["proved", "disproved"].includes(artifact.status);
   const dependencyNames = artifact.dependencies.map(id => (state.record.verification?.artifacts || state.record.proof_plan).find(a => a.id === id)?.property || id);
+  const mathematical = state.record.walkthrough?.models.flatMap(m => m.principles).find(p => p.id === artifact.id);
   return `<article class="panel proof-card" id="${artifact.id}"><div class="panel-header"><div><div class="eyebrow">${esc(artifact.name)} · ${esc(artifact.property)}</div><h2>${esc(artifact.statement)}</h2></div>${badge(artifact.status)}</div><div class="padded">
-    <div class="math-formula">${esc(artifact.formula)}</div><div class="proof-scope">${icon("info")}Scope: ${esc(artifact.scope.replaceAll("-", " "))}</div>
+    <div class="math-formula">${mathematical ? window.CodeFormWalkthrough.math(mathematical.latex, true) : esc(artifact.formula)}</div><div class="proof-scope">${icon("info")}Scope: ${esc(artifact.scope.replaceAll("-", " "))}</div>
     <div class="proof-columns"><div><h3>Given these assumptions</h3><div class="proof-assumptions">${artifact.assumptions.map(a => `<div class="proof-assumption"><span>${esc(a.kind)}</span><p>${esc(a.statement)}</p></div>`).join("")}</div><p class="model-note"><strong>Feasibility: ${esc(artifact.feasibility.status)}</strong><br>${esc(artifact.feasibility.note)}</p></div>
     <div><h3>${artifact.status === "disproved" ? "This conclusion fails" : "How the conclusion follows"}</h3><ol class="proof-steps">${artifact.reasoning.map(s => `<li><strong>${esc(s.title)}</strong><p>${esc(s.detail)}</p></li>`).join("")}</ol>
     ${dependencyNames.length ? `<div class="dependency-links"><span>Composes checked lemmas:</span>${artifact.dependencies.map((id, i) => `<a href="#${id}" data-proof-dependency="${id}">${esc(dependencyNames[i])}</a>`).join("")}</div>` : ""}
@@ -269,6 +271,7 @@ function diffView(diff) {
 }
 function render() {
   const content = !state.record ? welcome() : header() + snapshotBar() + (state.busy ? '<div class="progress-panel"><span class="loading-pulse"></span>Parsing repository and linking evidence…</div>' : "") + ({
+    walkthrough: () => window.CodeFormWalkthrough.render(state.record),
     overview, architecture, claims: () => toolbar("claims") + notice("Epistemic status describes the kind of support, not a confidence score. Observed source, proposed behavior, test results, and checked proofs are different claims."),
     findings: () => toolbar("findings") + notice("Accept a finding to export a bounded task specification with evidence and acceptance criteria. Review notes do not alter the original analysis."),
     behavior, proofs, agents: agentWorkspace, compare: compareView,
@@ -276,12 +279,14 @@ function render() {
   document.getElementById("app").innerHTML = shell(content);
   document.title = `code-form — ${state.record ? repoName() + " / " + titles[state.view] : "System explorer"}`;
   renderFiltered();
+  window.CodeFormMath?.render(document.getElementById("app"));
   if (state.view === "compare" && state.record) {
     const select = document.getElementById("compare-before");
     if (select.options.length > 1) select.selectedIndex = 1;
     document.getElementById("compare-after").value = state.record.bundle.id;
   }
 }
+window.CodeFormRender = render;
 async function selectSnapshot(id) {
   state.record = await api(`/api/snapshots/${id}`);
   state.selectedComponent = null;
@@ -309,7 +314,7 @@ async function analyze(path) {
     }
     if (result.status !== "complete") throw new Error(result.error || "Analysis failed.");
     state.snapshots = await api("/api/snapshots");
-    if (!state.record || state.record.bundle.repository.path !== path) state.view = "overview";
+    if (!state.record || state.record.bundle.repository.path !== path) state.view = "walkthrough";
     await selectSnapshot(result.snapshot_id);
     toast("Snapshot saved. Every claim is linked to captured source.");
   } catch (error) { toast(error.message); }
@@ -490,14 +495,14 @@ document.addEventListener("keydown", event => {
 });
 window.addEventListener("hashchange", async () => {
   const [, id, view] = location.hash.split(/[#/]/);
-  if (state.snapshots.some(s => s.id === id)) { state.view = titles[view] ? view : "overview"; await selectSnapshot(id); }
+  if (state.snapshots.some(s => s.id === id)) { state.view = titles[view] ? view : "walkthrough"; await selectSnapshot(id); }
 });
 (async function init() {
   try {
     const initial = await api("/api/bootstrap");
     Object.assign(state, initial);
     const [, id, view] = location.hash.split(/[#/]/);
-    state.view = titles[view] ? view : "overview";
+    state.view = titles[view] ? view : "walkthrough";
     const selected = state.snapshots.find(s => s.id === id) || state.snapshots[0];
     if (selected) await selectSnapshot(selected.id); else render();
   } catch (error) {

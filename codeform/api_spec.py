@@ -58,6 +58,12 @@ def openapi_document() -> dict:
             *[{"name": k, "in": "query", "schema": {"type": "integer", "minimum": 1}} for k in ("line_start", "line_end")],
         ])},
         "/api/v1/snapshots/{snapshot_id}/context": {"get": operation("getAgentContext", "Versioned instructions and reasoning context", parameters=[snapshot])},
+        "/api/v1/snapshots/{snapshot_id}/walkthrough": {"get": operation(
+            "getWalkthrough", "Read purpose, mathematical model excerpts, notation, and proof support", parameters=[snapshot])},
+        "/api/v1/snapshots/{snapshot_id}/scenarios": {"post": operation(
+            "simulateScenario", "Evaluate an example in the captured mathematical model without executing target code", True,
+            {"type": "object", "additionalProperties": False, "required": ["model_id", "inputs"],
+             "properties": {"model_id": {"type": "string"}, "inputs": {"type": "object"}}}, [snapshot])},
         "/api/v1/snapshots/{snapshot_id}/obligations": {"get": operation("getObligations", "Read fixed theorem contexts, statements, IDs, and hashes", parameters=[snapshot])},
         "/api/v1/snapshots/{snapshot_id}/attempts": {
             "get": operation("listAttempts", "Read immutable proof-attempt history", parameters=[snapshot]),
@@ -97,6 +103,14 @@ def openapi_document() -> dict:
     for endpoint in ("/api/v1/snapshots/{snapshot_id}/proposals",
                      "/api/v1/snapshots/{snapshot_id}/proposals/{proposal_id}/reviews"):
         paths[endpoint]["post"]["responses"]["201"] = {**deepcopy(json_response), "description": "Immutable record created"}
+    scenario_path = "/api/v1/snapshots/{snapshot_id}/scenarios"
+    paths[scenario_path]["post"]["responses"].pop("202", None)
+    paths[scenario_path]["post"]["responses"]["200"]["content"]["application/json"]["schema"] = {
+        "type": "object", "required": ["snapshot_id", "model_id", "result_kind", "proved", "target_executed", "trace"],
+        "properties": {"snapshot_id": {"type": "string"}, "model_id": {"type": "string"},
+                       "result_kind": {"const": "simulated_model_example"}, "proved": {"const": False},
+                       "target_executed": {"const": False}, "trace": {"type": "array", "items": {"type": "object"}}},
+    }
     schemas = {
         "Job": {
             "type": "object", "required": ["id", "status"],

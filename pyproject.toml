@@ -18,7 +18,7 @@ code-form = "codeform.cli:main"
 packages = ["codeform"]
 
 [tool.setuptools.package-data]
-codeform = ["web/*"]
+codeform = ["web/*", "web/vendor/katex/*", "web/vendor/katex/fonts/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

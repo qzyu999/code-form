@@ -24,6 +24,8 @@ jobs:
         with:
           node-version: "20"
       - run: node --check codeform/web/app.js
+      - run: node --check codeform/web/walkthrough.js
+      - run: node --check codeform/web/math.js
   lean-proofs:
     runs-on: ubuntu-latest
     steps:

@@ -73,6 +73,12 @@ class CodeFormClient:
     def context(self, snapshot_id: str):
         return self._request(f"/api/v1/snapshots/{snapshot_id}/context")
 
+    def walkthrough(self, snapshot_id: str):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/walkthrough")
+
+    def scenario(self, snapshot_id: str, model_id: str, inputs: dict):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/scenarios", {"model_id": model_id, "inputs": inputs})
+
     def obligations(self, snapshot_id: str):
         return self._request(f"/api/v1/snapshots/{snapshot_id}/obligations")
 
