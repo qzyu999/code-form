@@ -70,6 +70,7 @@ To reopen the demo storage used during development, add
 | View | Behavior |
 | --- | --- |
 | Start here | Guided purpose → mathematical objects → intended properties → examples → argument → Lean and source. |
+| Analysis DAG | Pinned workflow runs, parallel-ready tasks, role prompts, immutable artifacts, validation, and human gates. |
 | Overview | Repository metadata, model counts, dependency map, and priority findings. |
 | Architecture | Module imports, resolved calls, direct test references, and component source. |
 | Claim ledger | Search statements, filter epistemic status, and open supporting evidence. |
@@ -147,6 +148,11 @@ future MCP/Codex adapters.
 The authored client demo checks a fixed goal, reads diagnostics, retries, and
 saves a draft repair visible in **Agent workspace**. It does not call a model
 or edit source. OpenAPI is served at `/api/v1/openapi.json`.
+
+The [DAG workflow](docs/workflow-dag.md) coordinates those tools by dependency:
+facts and requirements → model draft → human review → parallel analysis roles
+→ validation → synthesis → human proposal review. Built-ins run locally;
+external agent nodes explicitly wait for submissions.
 
 ## CLI
 

@@ -124,3 +124,27 @@ class CodeFormClient:
 
     def compare(self, before: str, after: str):
         return self._request(f"/api/v1/compare?{urlencode({'before': before, 'after': after})}")
+
+    def workflow_templates(self):
+        return self._request("/api/v1/workflow-templates")
+
+    def workflows(self, snapshot_id):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/workflows")
+
+    def create_workflow(self, snapshot_id, objective, **options):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/workflows", {"objective": objective, **options})
+
+    def workflow(self, snapshot_id, workflow_id):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/workflows/{workflow_id}")
+
+    def advance_workflow(self, snapshot_id, workflow_id):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/workflows/{workflow_id}/advance", {})
+
+    def workflow_context(self, snapshot_id, workflow_id, node_id):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/workflows/{workflow_id}/nodes/{node_id}/context")
+
+    def workflow_output(self, snapshot_id, workflow_id, node_id, output):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/workflows/{workflow_id}/nodes/{node_id}/outputs", output)
+
+    def workflow_review(self, snapshot_id, workflow_id, node_id, review):
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/workflows/{workflow_id}/nodes/{node_id}/reviews", review)

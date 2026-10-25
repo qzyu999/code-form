@@ -278,6 +278,11 @@ The service does not launch Codex automatically or consume a model API key.
 A future Codex CLI/SDK or MCP adapter can orchestrate these same operations
 without duplicating analysis or checker semantics.
 
+The [DAG workflow API](workflow-dag.md) pins these tasks to a dependency graph
+with role prompts, immutable outputs, actual checker references, and exact
+human review gates. It supports read-only parallel built-ins and external
+agent submissions; it does not itself launch a model.
+
 ## Validation
 
 Run the standard-library suite with the local environment:

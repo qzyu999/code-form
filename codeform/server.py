@@ -16,6 +16,7 @@ from .proofs import checker_info, find_lean, proof_plan, verify_bundle
 from .agent_api import AgentService
 from .api_spec import openapi_document
 from .walkthrough import build_walkthrough, simulate_scenario
+from .workflows import WorkflowService
 
 WEB = Path(__file__).parent / "web"
 MAX_REQUEST_BYTES = 20_000_000
@@ -34,6 +35,7 @@ class Application:
         self.jobs: dict[str, dict] = {}
         self.lock = threading.Lock()
         self.agents = AgentService(self)
+        self.workflows = WorkflowService(self)
         self.examples = []
         # Bundled examples stay available when the allowed workspace is broader.
         examples_dir = Path(__file__).resolve().parents[1] / "examples"
@@ -177,6 +179,31 @@ class Application:
         with self.lock:
             self.jobs[job_id].update(update)
 
+    def submit_workflow(self, snapshot_id, workflow_id):
+        self.workflows.get(snapshot_id, workflow_id)
+        with self.lock:
+            if any(j.get("workflow_id") == workflow_id and j["status"] in {"queued", "running"} for j in self.jobs.values()):
+                raise ValueError("Workflow advancement is already running.")
+            if sum(j["status"] in {"queued", "running"} for j in self.jobs.values()) >= 4:
+                raise ValueError("The local job queue is full.")
+            job_id = "job_" + secrets.token_hex(8)
+            job = {"id": job_id, "kind": "workflow", "workflow_id": workflow_id,
+                   "snapshot_id": snapshot_id, "status": "queued", "created_at": utc_now()}
+            self.jobs[job_id] = job
+        self.executor.submit(self._workflow, job_id, snapshot_id, workflow_id)
+        return dict(job)
+
+    def _workflow(self, job_id, snapshot_id, workflow_id):
+        with self.lock:
+            self.jobs[job_id]["status"] = "running"
+        try:
+            result = self.workflows.advance(snapshot_id, workflow_id)
+            update = {"status": "complete", "workflow_state": result["state"]}
+        except Exception as error:
+            update = {"status": "failed", "error": str(error)}
+        with self.lock:
+            self.jobs[job_id].update(update)
+
 
 def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
     class Handler(BaseHTTPRequestHandler):
@@ -200,8 +227,13 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                              "img-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; base-uri 'none'")
             if filename:
                 self.send_header("Content-Disposition", f'attachment; filename="{filename}"')
-            self.end_headers()
-            self.wfile.write(content)
+            try:
+                self.end_headers()
+                self.wfile.write(content)
+            except ConnectionError:
+                # A disconnected client does not undo an already recorded job
+                # or artifact; it can read the immutable result after reconnect.
+                pass
 
         def _json(self, status: int, value):
             self._send(status, json.dumps(value, ensure_ascii=False).encode())
@@ -222,6 +254,8 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                 self._json(200, openapi_document())
             elif path == "/api/v1/capabilities":
                 self._json(200, app.agents.capabilities())
+            elif path == "/api/v1/workflow-templates":
+                self._json(200, app.workflows.templates())
             elif path == "/api/v1/snapshots":
                 self._json(200, app.store.list())
             elif path == "/api/v1/compare":
@@ -261,11 +295,17 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                         result = app.store.verification(snapshot_id)
                     elif endpoint == "walkthrough":
                         result = build_walkthrough(record["bundle"], app.store.verification(snapshot_id))
+                    elif endpoint == "workflows":
+                        result = app.workflows.list(snapshot_id)
                     else:
                         raise KeyError("Endpoint not found.")
                     self._json(200, result)
                 elif len(parts) == 3 and parts[1] == "attempts":
                     self._json(200, app.agents.attempt(snapshot_id, parts[2]))
+                elif len(parts) == 3 and parts[1] == "workflows":
+                    self._json(200, app.workflows.get(snapshot_id, parts[2]))
+                elif len(parts) == 6 and parts[1] == "workflows" and parts[3] == "nodes" and parts[5] == "context":
+                    self._json(200, app.workflows.context(snapshot_id, parts[2], parts[4]))
                 elif len(parts) == 4 and parts[1] == "proposals" and parts[3] == "reviews":
                     self._json(200, app.agents.reviews(snapshot_id, parts[2]))
                 else:
@@ -292,6 +332,16 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                 elif len(parts) == 2 and parts[1] == "scenarios":
                     bundle = app.store.get(snapshot_id)["bundle"]
                     self._json(200, simulate_scenario(bundle, payload))
+                elif len(parts) == 2 and parts[1] == "workflows":
+                    self._json(201, app.workflows.create(snapshot_id, payload))
+                elif len(parts) == 4 and parts[1] == "workflows" and parts[3] == "advance":
+                    if payload:
+                        raise ValueError("Workflow advancement requires an empty object.")
+                    self._json(202, app.submit_workflow(snapshot_id, parts[2]))
+                elif len(parts) == 6 and parts[1] == "workflows" and parts[3] == "nodes" and parts[5] == "outputs":
+                    self._json(201, app.workflows.complete(snapshot_id, parts[2], parts[4], payload))
+                elif len(parts) == 6 and parts[1] == "workflows" and parts[3] == "nodes" and parts[5] == "reviews":
+                    self._json(201, app.workflows.review(snapshot_id, parts[2], parts[4], payload))
                 elif len(parts) == 4 and parts[1] == "proposals" and parts[3] == "reviews":
                     self._json(201, app.agents.review_proposal(snapshot_id, parts[2], payload))
                 else:
@@ -308,6 +358,7 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                           "/app.js": ("app.js", "text/javascript; charset=utf-8"),
                           "/math.js": ("math.js", "text/javascript; charset=utf-8"),
                           "/walkthrough.js": ("walkthrough.js", "text/javascript; charset=utf-8"),
+                          "/workflows.js": ("workflows.js", "text/javascript; charset=utf-8"),
                           "/style.css": ("style.css", "text/css; charset=utf-8")}
                 if path.startswith("/api/v1/"):
                     self._v1_get(path, query)
@@ -357,6 +408,7 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                                          "verification": app.store.verification(parts[0]),
                                          "proof_plan": proof_plan(bundle),
                                          "walkthrough": build_walkthrough(bundle, app.store.verification(parts[0])),
+                                         "workflow_runs": app.workflows.list(parts[0]),
                                          "agent_work": {"attempts": app.agents.attempts(parts[0]),
                                                         "proposals": app.agents.proposals(parts[0])}})
                     elif len(parts) == 2 and parts[1] == "verification":

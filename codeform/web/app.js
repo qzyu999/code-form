@@ -29,8 +29,9 @@ const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const badge = (value) => `<span class="badge ${esc(value)}">${esc(value)}</span>`;
 const state = { view: "walkthrough", snapshots: [], examples: [], record: null, token: "", workspace: "", search: "", severity: "all", status: "all", graphKind: "imports", selectedComponent: null, busy: false, proofBusy: false, diff: null, error: "", drawer: null, proof_checker: null };
-const titles = { walkthrough: "System walkthrough", overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", agents: "Agent workspace", compare: "Snapshot comparison" };
+const titles = { walkthrough: "System walkthrough", workflow: "Analysis workflow", overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", agents: "Agent workspace", compare: "Snapshot comparison" };
 let toastTimer, lastFocus;
+let snapshotLoadGeneration = 0;
 
 async function api(path, payload) {
   const response = await fetch(path, payload === undefined ? {} : { method: "POST", headers: { "Content-Type": "application/json", "X-Codeform-Token": state.token }, body: JSON.stringify(payload) });
@@ -65,7 +66,7 @@ function notice(text) { return `<div class="notice">${icon("info")}<span>${esc(t
 
 function shell(content) {
   const findings = state.record?.bundle.summary.findings;
-  const nav = [["walkthrough", "activity", "Start here"], ["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["agents", "code", "Agent workspace"], ["compare", "compare", "Compare"]];
+  const nav = [["walkthrough", "activity", "Start here"], ["workflow", "graph", "Analysis DAG"], ["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["agents", "code", "Agent workspace"], ["compare", "compare", "Compare"]];
   return `<div class="app-shell"><aside class="sidebar">
     <a class="brand" href="/" aria-label="code-form home"><span class="brand-mark">${icon("cube")}</span><span class="brand-name">code-form<span class="muted">.</span></span></a>
     <div class="workspace-label">SYSTEM EXPLORER</div>
@@ -81,6 +82,7 @@ function shell(content) {
 function header() {
   const subtitles = {
     walkthrough: "Connect purpose, examples, mathematical objects, and the implementation that gives them meaning.",
+    workflow: "One versioned DAG: parallel work, pinned evidence, and explicit human review gates.",
     overview: "A traceable view of your codebase, from structure to the questions worth asking.",
     architecture: "Follow the dependencies. Inspect the components. Trace relationships to code.",
     claims: "What the system model says, how it knows, and where the evidence lives.",
@@ -270,8 +272,9 @@ function diffView(diff) {
     ${Object.entries(diff.changes).filter(([, value]) => value.added.length + value.removed.length + value.changed.length).map(([key, value]) => `<div class="section-heading"><h2>${key[0].toUpperCase() + key.slice(1)}</h2></div><div class="panel">${["added", "removed", "changed"].flatMap(kind => value[kind].slice(0, 50).map(entity => `<div class="diff-item"><span class="${kind}">${kind === "added" ? "+" : kind === "removed" ? "−" : "~"} ${kind}</span> · ${esc(entityName(entity.after || entity))}</div>`)).join("")}</div>`).join("")}`;
 }
 function render() {
-  const content = !state.record ? welcome() : header() + snapshotBar() + (state.busy ? '<div class="progress-panel"><span class="loading-pulse"></span>Parsing repository and linking evidence…</div>' : "") + ({
+  const content = state.loadingSnapshot ? '<div class="boot">Loading the selected captured snapshot…</div>' : !state.record ? welcome() : header() + snapshotBar() + (state.busy ? '<div class="progress-panel"><span class="loading-pulse"></span>Parsing repository and linking evidence…</div>' : "") + ({
     walkthrough: () => window.CodeFormWalkthrough.render(state.record),
+    workflow: () => window.CodeFormWorkflows.render(state.record),
     overview, architecture, claims: () => toolbar("claims") + notice("Epistemic status describes the kind of support, not a confidence score. Observed source, proposed behavior, test results, and checked proofs are different claims."),
     findings: () => toolbar("findings") + notice("Accept a finding to export a bounded task specification with evidence and acceptance criteria. Review notes do not alter the original analysis."),
     behavior, proofs, agents: agentWorkspace, compare: compareView,
@@ -280,15 +283,24 @@ function render() {
   document.title = `code-form — ${state.record ? repoName() + " / " + titles[state.view] : "System explorer"}`;
   renderFiltered();
   window.CodeFormMath?.render(document.getElementById("app"));
-  if (state.view === "compare" && state.record) {
+  if (state.view === "compare" && state.record && !state.loadingSnapshot) {
     const select = document.getElementById("compare-before");
-    if (select.options.length > 1) select.selectedIndex = 1;
-    document.getElementById("compare-after").value = state.record.bundle.id;
+    if (select && select.options.length > 1) select.selectedIndex = 1;
+    const after = document.getElementById("compare-after");
+    if (after) after.value = state.record.bundle.id;
   }
 }
 window.CodeFormRender = render;
 async function selectSnapshot(id) {
-  state.record = await api(`/api/snapshots/${id}`);
+  const generation = ++snapshotLoadGeneration;
+  state.loadingSnapshot = true;
+  render();
+  let record;
+  try { record = await api(`/api/snapshots/${id}`); }
+  catch (error) { if (generation === snapshotLoadGeneration) { state.loadingSnapshot = false; state.record = null; render(); } throw error; }
+  if (generation !== snapshotLoadGeneration) return;
+  state.record = record;
+  state.loadingSnapshot = false;
   state.selectedComponent = null;
   state.diff = null;
   state.search = ""; state.status = "all"; state.severity = "all";
