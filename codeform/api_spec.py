@@ -99,6 +99,7 @@ def openapi_document() -> dict:
         "post": operation("createWorkflow", "Pin objective, requirements, prompts, and snapshot in a new DAG run", True,
                           {"type": "object", "required": ["objective"], "additionalProperties": False,
                            "properties": {"objective": {"type": "string", "maxLength": 4000},
+                                          "mode": {"enum": ["review", "preview"], "default": "review"},
                                           "parent_id": {"type": "string"}, "parent_snapshot_id": {"type": "string"},
                                           "supersede_parent": {"type": "boolean"},
                                           "prompt_overrides": {"type": "object"}}}, [snapshot]),

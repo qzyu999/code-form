@@ -62,6 +62,31 @@ The target's current semantics do not match the existing proof adapters.
 Claims about billing or routing therefore remain proposed/inferred; there is
 no implementation proof. This boundary must survive later synthesis.
 
+## Read-only E2E preview
+
+Workflow creation can specify `mode: "preview"` to inspect the whole pipeline
+without recording owner approval. The default is `mode: "review"`.
+Preview mode replaces human nodes with explicitly labeled built-in preview
+checkpoints; their artifacts record `human_approval: false`. It cannot
+supersede the live review run or apply source changes.
+
+External stages still require actual submissions. A preview does not silently
+invoke an AI model. The inference-exchange E2E preview prepared in this session
+uses manual Codex source analysis submitted through those external-node APIs.
+It contains architecture findings, proposed formulas, a standalone rounding
+comparison, candidate event traces, test plans, validation, and synthesis.
+No target code/tests were executed and no implementation proof was produced.
+
+Completed previews are labeled `preview_complete`, not owner-reviewed
+completion. The UI opens synthesis and shows verification coverage and
+unresolved boundaries. A deep link can select a particular run:
+
+```text
+/#snapshot_ID/workflow/workflow_ID
+```
+
+Normal entry into the workflow view prefers the live review run.
+
 ## Python API sequence
 
 ```python

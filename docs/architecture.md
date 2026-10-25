@@ -46,6 +46,9 @@ The repository content hash combines sorted path/hash pairs. Snapshot IDs
 combine repository path, source content hash, Git commit, analyzer version,
 implementation hash, and Python runtime version. Analysis timestamps are stored
 outside the bundle to keep repeated analysis deterministic.
+Git dirty metadata is scoped to the analyzed directory and participates in
+snapshot identity, so unrelated parent-repository edits cannot cause a
+same-ID/different-metadata collision.
 
 Git SHA identifies the baseline, not necessarily the exact working tree.
 Captured sources and content hashes identify what was actually analyzed.

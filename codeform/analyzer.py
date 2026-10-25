@@ -143,17 +143,18 @@ def analyze_repository(repository: str | Path) -> dict:
         Path(__file__).read_bytes() + Path(__file__).with_name("model.py").read_bytes()
     ).hexdigest()
     commit = _git(root, "rev-parse", "HEAD")
-    status = _git(root, "status", "--porcelain", "--untracked-files=normal")
+    status = _git(root, "status", "--porcelain", "--untracked-files=normal", "--", ".")
+    dirty = bool(status) if status is not None else None
     bundle = {
         "schema_version": SCHEMA_VERSION,
-        "id": stable_id("snapshot", str(root), content_hash, commit or "", __version__, sys.version, implementation_hash),
+        "id": stable_id("snapshot", str(root), content_hash, commit or "", __version__, sys.version, implementation_hash, str(dirty)),
         "analyzer": {"name": "code-form", "version": __version__, "adapter": "python-ast",
                      "implementation_sha256": implementation_hash,
                      "python_version": ".".join(map(str, sys.version_info[:3])),
                      "configuration": {"max_files": MAX_FILES, "max_file_bytes": MAX_FILE_BYTES,
                                        "max_total_bytes": MAX_TOTAL_BYTES}},
         "repository": {"name": root.name, "path": str(root), "commit_sha": commit,
-                       "dirty": bool(status) if status is not None else None,
+                       "dirty": dirty,
                        "content_sha256": content_hash, "languages": ["Python"],
                        "dependencies": [], "suggested_test_commands": []},
         "sources": sources, "skipped_files": skipped, "components": [], "relationships": [],

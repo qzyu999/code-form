@@ -6,7 +6,12 @@ window.CodeFormWorkflows = (() => {
   let busy = false;
   const badge = value => `<span class="badge ${E(value)}">${E(value.replaceAll("_", " "))}</span>`;
   const math = latex => `<span data-latex="${E(latex)}" data-display="true"></span>`;
-  const current = record => record.workflow_runs?.find(r => r.id === runs.get(record.bundle.id)) || record.workflow_runs?.at(-1);
+  const current = record => {
+    const [, snapshot, view, linkedRun] = location.hash.split(/[#/]/);
+    const requested = snapshot === record.bundle.id && view === "workflow" ? linkedRun : null;
+    return record.workflow_runs?.find(r => r.id === (requested || runs.get(record.bundle.id))) ||
+      record.workflow_runs?.filter(r => r.mode !== "preview").at(-1) || record.workflow_runs?.at(-1);
+  };
 
   function graph(run) {
     const ranks = {};
@@ -44,12 +49,14 @@ window.CodeFormWorkflows = (() => {
     const intro = `<section class="panel padded"><div class="section-heading"><div><h2>One run, one source revision, one specification</h2><p>Agents work when dependencies are ready. The join collects evidence and unknowns, not votes.</p></div><span class="badge proposed">External model executor</span></div><p class="model-note">This controller calls no model automatically. Built-in tasks run here; external roles submit artifacts through the API. Target code, tests, patches, merges, and deployments are not executed.</p>
     <form id="flow-create"><div class="field"><label for="flow-objective">Analysis objective</label><textarea id="flow-objective" name="objective" required maxlength="4000">Explain this repository's purpose, state, requirements, trust and failure boundaries, and candidate mathematical obligations from captured evidence.</textarea></div><button class="btn primary" type="submit" ${busy ? "disabled" : ""}>Create and prepare analysis DAG</button></form></section>`;
     if (!run) return intro + '<div class="panel empty agent-section">No workflow run for this snapshot. Create a run to pin its objective and prepare source facts and requirements.</div>';
-    const selected = selections.get(run.id) || run.nodes.find(n => n.status === "awaiting_review")?.id || run.nodes.find(n => n.status === "awaiting_agent")?.id || run.nodes[0].id;
+    const selected = selections.get(run.id) || (["complete", "preview_complete"].includes(run.state) ? "synthesis" : null) ||
+      run.nodes.find(n => n.status === "awaiting_review")?.id || run.nodes.find(n => n.status === "awaiting_agent")?.id || run.nodes[0].id;
     selections.set(run.id, selected);
     const node = run.nodes.find(n => n.id === selected);
     const readyBuiltins = run.state !== "superseded" && run.nodes.some(n => n.executor === "builtin" && ["ready", "interrupted"].includes(n.status));
     const controls = `<div class="flow-controls"><select id="flow-select" aria-label="Workflow run">${record.workflow_runs.map(r => `<option value="${r.id}" ${r.id === run.id ? "selected" : ""}>${E(r.id)} · ${E(r.state.replaceAll("_", " "))}</option>`).join("")}</select>${badge(run.state)}<button class="btn" data-flow-action="refresh">Refresh</button><button class="btn primary" data-flow-action="advance" ${!readyBuiltins || busy ? "disabled" : ""}>Run ready built-in steps</button><button class="btn" data-flow-action="export">Export run</button></div><div class="flow-pins"><span>Snapshot <code>${E(run.snapshot_id)}</code></span><span>Specification <code>${E(run.spec_sha256.slice(0, 16))}</code></span><span>Template <code>${E(run.version)}</code></span></div><p class="model-note">${E(run.objective)}</p>`;
-    return intro + controls + (run.state === "superseded" ? `<div class="notice"><span>This run is preserved as history and superseded by ${run.superseded_by.map(E).join(", ")}. New work and reviews must use the replacement.</span></div>` : "") + graph(run) + `<div class="flow-ready">Ready in parallel: ${run.parallel_ready.map(id => `<button data-flow-node="${id}" class="btn small">${E(run.nodes.find(n => n.id === id).label)}</button>`).join("") || "No ready work."}</div>` +
+    return intro + controls + (run.mode === "preview" ? `<div class="notice flow-preview"><span><strong>Read-only E2E preview — not owner-approved</strong><br>Preview checkpoints replace human gates only in this separate demonstration. The live review run remains gated. Claims, proposed tests, and completed stages are not implementation proofs.</span></div>` : "") +
+      (run.state === "superseded" ? `<div class="notice"><span>This run is preserved as history and superseded by ${run.superseded_by.map(E).join(", ")}. New work and reviews must use the replacement.</span></div>` : "") + graph(run) + `<div class="flow-ready">Ready in parallel: ${run.parallel_ready.map(id => `<button data-flow-node="${id}" class="btn small">${E(run.nodes.find(n => n.id === id).label)}</button>`).join("") || "No ready work."}</div>` +
       nodePanel(run, node, record) + `<details class="panel flow-events"><summary>Immutable event history · ${run.events.length}</summary><ol>${run.events.map(e => `<li><code>${e.sequence}</code> ${E(e.node_id)} → <strong>${E(e.status)}</strong><small>${E(e.created_at)}</small></li>`).join("")}</ol></details>`;
   }
 
@@ -69,7 +76,9 @@ window.CodeFormWorkflows = (() => {
   function artifactView(artifact) {
     if (!artifact) return '<p class="model-note">This node has no output yet.</p>';
     const content = artifact.content;
+    const validation = content.validation || (content.checked_attempts ? content : null);
     return `<section class="flow-artifact"><div class="flow-artifact-id"><code>${E(artifact.id)}</code><span>${E(artifact.actor)}</span><code>${E(artifact.sha256.slice(0, 16))}</code></div><p>${E(content.summary)}</p>${content.diagram ? diagram(content.diagram) : ""}
+    ${validation ? `<div class="notice flow-validation"><span><strong>Verification coverage</strong><br>${validation.checked_attempts.length} checked proof/counterexample references · ${validation.supported_obligations} supported adapter obligations.<br>${E(validation.scope)}<br>Target tests executed: ${validation.target_tests_executed ? "yes" : "no"}.</span></div>` : ""}
     ${content.purpose ? `<h3>Documented purpose</h3><p class="model-note">${E(content.purpose.text)}</p>` : ""}
     ${content.requirements ? `<h3>Captured requirements · ${content.requirements.length}</h3><div class="panel">${content.requirements.slice(0, 12).map(r => `<div class="walk-requirement"><div><code>${E(r.id)}</code><h3>${E(r.title)}</h3><p>${E(r.statement)}</p><small>Documentation status: ${E(r.declared_status)}</small></div></div>`).join("")}</div>` : ""}
     ${content.claims?.length ? `<h3>Source-linked claims and proposed mathematics</h3>${content.claims.map(c => `<div class="flow-claim">${badge(c.status)}<p>${E(c.statement)}</p>${c.latex ? `<div class="math-formula">${math(c.latex)}</div>` : ""}<div class="proof-evidence-bar">${c.evidence.map(sourceLink).join("")}</div></div>`).join("")}` : ""}
@@ -128,7 +137,11 @@ window.CodeFormWorkflows = (() => {
     }
   });
   document.addEventListener("change", event => {
-    if (event.target.id === "flow-select") { runs.set(state.record.bundle.id, event.target.value); window.CodeFormRender(); }
+    if (event.target.id === "flow-select") {
+      runs.set(state.record.bundle.id, event.target.value);
+      history.replaceState(null, "", `/#${state.record.bundle.id}/workflow/${event.target.value}`);
+      window.CodeFormRender();
+    }
   });
   document.addEventListener("submit", async event => {
     if (!["flow-create", "flow-review", "flow-output"].includes(event.target.id)) return;

@@ -174,6 +174,33 @@ class WorkflowTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             self.service.advance(self.snapshot, before["id"])
 
+    def test_preview_finishes_without_fabricating_or_changing_human_review(self):
+        live_id = self.run["id"]
+        preview = self.service.create(self.snapshot, {"objective": "Read-only example preview.", "mode": "preview",
+                                                      "parent_id": live_id})
+        self.run = preview
+        self.service.advance(self.snapshot, preview["id"])
+        self.output("model")
+        prepared = self.service.advance(self.snapshot, preview["id"])
+        checkpoint = next(n for n in prepared["nodes"] if n["id"] == "model_review")
+        self.assertEqual("builtin", checkpoint["executor"])
+        self.assertFalse(checkpoint["artifact"]["content"]["human_approval"])
+        self.assertIsNone(self.service.context(self.snapshot, preview["id"], "architecture")["reviewed_model"])
+        with self.assertRaises(ValueError):
+            self.review("model_review")
+        self.output("architecture")
+        self.output("formalization")
+        for node in ("proof", "counterexample", "tests"):
+            self.output(node)
+        completed = self.service.advance(self.snapshot, preview["id"])
+        self.assertEqual("preview_complete", completed["state"])
+        self.assertTrue(completed["execution_policy"]["preview_is_not_approval"])
+        self.assertEqual("ready", self.service.get(self.snapshot, live_id)["state"])
+        self.assertEqual([], self.service.get(self.snapshot, live_id)["events"])
+        with self.assertRaises(ValueError):
+            self.service.create(self.snapshot, {"objective": "Invalid preview", "mode": "preview",
+                                               "parent_id": live_id, "supersede_parent": True})
+
     @unittest.skipUnless(checker_info(find_lean())["available"], "Pinned Lean is optional.")
     def test_validation_resolves_only_real_selected_checker_evidence(self):
         self.service.advance(self.snapshot, self.run["id"])

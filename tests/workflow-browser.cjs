@@ -17,7 +17,7 @@ const { chromium } = require(process.env.PLAYWRIGHT_MODULE || "playwright-core")
     const snapshot = bootstrap.snapshots.find(s => s.repository.name === (process.env.WORKFLOW_REVIEW_REPO || "inference-exchange"));
     assert.ok(snapshot, "Prepare the requested real review snapshot before this test.");
     const initial = await (await page.request.get(`${base}/api/v1/snapshots/${snapshot.id}/workflows`)).json();
-    const run = initial.at(-1);
+    const run = initial.filter(r => r.mode !== "preview").at(-1);
     assert.equal(run.state, "awaiting_review");
     assert.equal(run.nodes.find(n => n.id === "model_review").status, "awaiting_review");
     await page.goto(`${base}/#${snapshot.id}/workflow`);

@@ -304,7 +304,10 @@ async function selectSnapshot(id) {
   state.selectedComponent = null;
   state.diff = null;
   state.search = ""; state.status = "all"; state.severity = "all";
-  history.replaceState(null, "", `/#${id}/${state.view}`);
+  const [, previousSnapshot, previousView, workflowRun] = location.hash.split(/[#/]/);
+  const suffix = state.view === "workflow" && previousSnapshot === id && previousView === "workflow" &&
+    /^workflow_[0-9a-f]{16}$/.test(workflowRun || "") ? `/${workflowRun}` : "";
+  history.replaceState(null, "", `/#${id}/${state.view}${suffix}`);
   render();
 }
 function navigate(view) {
