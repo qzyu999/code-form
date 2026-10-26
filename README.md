@@ -46,6 +46,12 @@ The default **Start here** view presents documented purpose, supported
 mathematical model excerpts, LaTeX notation, scenarios, and Lean/source evidence.
 See [the walkthrough guide](docs/math-first-walkthrough.md).
 
+Open **Review report** to read purpose, proposed mathematics, architecture,
+source evidence, test plans, and actual Lean coverage together. Export
+standalone HTML (offline LaTeX and embedded JSON), Markdown, or a full JSON
+package for AI review. See [review reports](docs/review-reports.md).
+An unsupported formal model is distinct from a checker that has not run.
+
 On Windows, `.\scripts\setup.ps1` creates the environment and
 `.\scripts\start.ps1` starts the demo. Activation and installation are optional.
 The environment uses `--without-pip` because the app needs no installed packages.

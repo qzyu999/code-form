@@ -9,6 +9,13 @@ The API calls no model and needs no OpenAI API key. An external agent supplies
 reasoning using its own configured model connection. This release provides
 tools and records, not an automatic model-driven research agent.
 
+`GET /api/v1/snapshots/{snapshot_id}/report` joins the saved analysis,
+selected workflow, review state, and checker coverage for human/AI review.
+Use `format=json|markdown|html`, optional `workflow_id`, and `download=1`
+for standalone HTML. The client exposes `report(snapshot_id, workflow_id)`;
+the CLI exposes `api report ... --output DIRECTORY`.
+See [review-reports.md](review-reports.md) for selection, provenance, and exports.
+
 ## Start
 
 Use the checkout's local virtual environment:

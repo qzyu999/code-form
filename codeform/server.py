@@ -17,6 +17,7 @@ from .agent_api import AgentService
 from .api_spec import openapi_document
 from .walkthrough import build_walkthrough, simulate_scenario
 from .workflows import WorkflowService
+from .reports import build_report, report_html, report_markdown as review_markdown, verification_status
 
 WEB = Path(__file__).parent / "web"
 MAX_REQUEST_BYTES = 20_000_000
@@ -238,6 +239,22 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
         def _json(self, status: int, value):
             self._send(status, json.dumps(value, ensure_ascii=False).encode())
 
+        def _report(self, snapshot_id, query, default_format="json"):
+            kind = query.get("format", [default_format])[0]
+            if kind not in {"json", "markdown", "html"}:
+                raise ValueError("Report format must be json, markdown, or html.")
+            report = build_report(app, snapshot_id, query.get("workflow_id", [None])[0])
+            name = f"{snapshot_id}-review"
+            if kind == "json":
+                self._send(200, json.dumps(report, indent=2, ensure_ascii=False).encode(),
+                           "application/json", f"{name}.json")
+            elif kind == "markdown":
+                self._send(200, review_markdown(report).encode(), "text/markdown; charset=utf-8", f"{name}.md")
+            else:
+                download = query.get("download", ["0"])[0] == "1"
+                self._send(200, report_html(report, standalone=download).encode(),
+                           "text/html; charset=utf-8", f"{name}.html" if download else None)
+
         def _guard(self, mutation: bool = False) -> None:
             allowed_hosts = {f"127.0.0.1:{self.server.server_port}", f"localhost:{self.server.server_port}"}
             host = self.headers.get("Host", "")
@@ -297,6 +314,9 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                         result = build_walkthrough(record["bundle"], app.store.verification(snapshot_id))
                     elif endpoint == "workflows":
                         result = app.workflows.list(snapshot_id)
+                    elif endpoint == "report":
+                        self._report(snapshot_id, query)
+                        return
                     else:
                         raise KeyError("Endpoint not found.")
                     self._json(200, result)
@@ -359,12 +379,16 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                           "/math.js": ("math.js", "text/javascript; charset=utf-8"),
                           "/walkthrough.js": ("walkthrough.js", "text/javascript; charset=utf-8"),
                           "/workflows.js": ("workflows.js", "text/javascript; charset=utf-8"),
+                          "/report.js": ("report.js", "text/javascript; charset=utf-8"),
+                          "/report.css": ("report.css", "text/css; charset=utf-8"),
                           "/style.css": ("style.css", "text/css; charset=utf-8")}
                 if path.startswith("/api/v1/"):
                     self._v1_get(path, query)
                 elif path in static:
                     filename, content_type = static[path]
                     self._send(200, (WEB / filename).read_bytes(), content_type)
+                elif path.startswith("/reports/"):
+                    self._report(path.removeprefix("/reports/"), query, "html")
                 elif path.startswith("/vendor/katex/"):
                     relative = path.removeprefix("/vendor/katex/")
                     types = {"katex.min.js": "text/javascript; charset=utf-8", "katex.min.css": "text/css; charset=utf-8"}
@@ -407,6 +431,7 @@ def make_server(app: Application, port: int = 7331) -> ThreadingHTTPServer:
                         self._json(200, {**record, "annotations": app.store.annotations(parts[0]),
                                          "verification": app.store.verification(parts[0]),
                                          "proof_plan": proof_plan(bundle),
+                                         "proof_status": verification_status(bundle, app.store.verification(parts[0]), checker_info(app.lean)),
                                          "walkthrough": build_walkthrough(bundle, app.store.verification(parts[0])),
                                          "workflow_runs": app.workflows.list(parts[0]),
                                          "agent_work": {"attempts": app.agents.attempts(parts[0]),

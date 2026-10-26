@@ -14,6 +14,13 @@ selector. The app uses captured source; edits appear after re-analysis.
 Stop with Ctrl+C in the server terminal and wait for the prompt.
 See [operations.md](operations.md) for restart, storage, and troubleshooting.
 
+For a unified human/AI review, open **Review report**. On inference-exchange,
+confirm that proposed LaTeX is visible while supported Lean obligations remain
+zero and the live owner gate stays unapproved. Save standalone HTML, stop the
+server, and confirm its mathematics and embedded JSON work offline.
+`tests/reports-browser.cjs` checks these behaviors on the existing preview
+without submitting reviews or running target code.
+
 ## Inspect a repository
 
 Select **payment-service**:

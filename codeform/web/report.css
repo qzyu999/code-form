@@ -1,0 +1,29 @@
+:root { color-scheme: light; font-family: Inter, "Segoe UI", sans-serif; color: #243041; background: #f6f7fb; }
+* { box-sizing: border-box; }
+body { margin: 0; }
+a { color: #574284; text-underline-offset: 3px; }
+.report-tools { display: flex; flex-wrap: wrap; align-items: center; gap: 20px; padding: 18px 5%; background: #fff; border-bottom: 1px solid #e0e3eb; }
+.report-tools button { border: 1px solid #cdd3df; background: #fff; padding: 8px 12px; border-radius: 6px; color: inherit; cursor: pointer; }
+.review-report { width: min(1100px, 100%); margin: 35px auto; padding: 0 24px; }
+.report-toc { display: flex; gap: 10px 20px; flex-wrap: wrap; font-size: 13px; margin-bottom: 28px; }
+article { padding: 36px 48px; background: white; border: 1px solid #e0e3eb; border-radius: 10px; line-height: 1.75; overflow-wrap: anywhere; }
+h1 { margin-top: 0; font-size: 30px; letter-spacing: -.5px; }
+h2 { margin: 38px 0 15px; padding-top: 22px; border-top: 1px solid #e7e9ef; font-size: 22px; color: #413060; }
+h3 { margin: 24px 0 12px; font-size: 16px; }
+p { margin: 12px 0; }
+li { margin: 8px 0; }
+ul { padding-left: 23px; }
+pre { padding: 16px; background: #f6f7fb; border-radius: 6px; font-size: 12px; line-height: 1.6; overflow: auto; overflow-wrap: normal; }
+code { font-family: Consolas, monospace; }
+details { margin: 16px 0; padding: 12px 15px; border: 1px solid #e1e4ed; border-radius: 6px; min-width: 0; }
+summary { cursor: pointer; font-size: 12px; color: #657087; overflow-wrap: anywhere; }
+.report-math { margin: 22px 0; padding: 16px; background: #f8f6fc; border-radius: 6px; overflow: auto; }
+.report-math .katex { font-size: 1.1em; }
+.report-diagram { overflow: auto; margin: 24px 0; }
+.report-diagram svg { width: 100%; min-width: 700px; display: block; }
+.report-diagram path { fill: none; stroke: #ac9ac5; stroke-width: 1.5; }
+.report-diagram marker path { fill: #ac9ac5; stroke: none; }
+.report-diagram rect { fill: #f8f6fc; stroke: #c8bdd9; }
+.report-diagram text { font-size: 11px; fill: #413060; }
+@media (max-width: 650px) { article { padding: 22px 18px; } .review-report { padding: 0 12px; } h1 { font-size: 25px; } .report-tools { gap: 12px; } }
+@media print { :root { background: white; } .report-tools, .report-toc { display: none; } .review-report { width: 100%; margin: 0; padding: 0; } article { border: 0; padding: 0; } pre { white-space: pre-wrap; } details { break-inside: avoid; } h2, h3 { break-after: avoid; } .report-diagram svg { min-width: 0; } }

@@ -27,6 +27,7 @@ jobs:
       - run: node --check codeform/web/walkthrough.js
       - run: node --check codeform/web/math.js
       - run: node --check codeform/web/workflows.js
+      - run: node --check codeform/web/report.js
   lean-proofs:
     runs-on: ubuntu-latest
     steps:

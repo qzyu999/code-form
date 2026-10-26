@@ -52,7 +52,7 @@ class AgentService:
             "checker": checker_info(self.app.lean), "strategies": sorted(STRATEGIES),
             "operations": ["analyze", "inspect_evidence", "list_obligations", "attempt_proof",
                            "inspect_diagnostics", "save_proposal", "review_proposal", "compare", "verify",
-                           "create_workflow", "advance_ready_nodes", "submit_node_output", "review_gate"],
+                           "create_workflow", "advance_ready_nodes", "submit_node_output", "review_gate", "review_report"],
             "limits": {"proof_jobs": 1, "proposal_text_characters": 12000, "proof_timeout_seconds": 30},
             "model_connection": "External agent; code-form does not require model API credentials.",
             "unsupported": ["arbitrary_lean", "new_checked_contracts", "general_python_semantics",

@@ -63,6 +63,12 @@ def openapi_document() -> dict:
         "/api/v1/snapshots/{snapshot_id}/context": {"get": operation("getAgentContext", "Versioned instructions and reasoning context", parameters=[snapshot])},
         "/api/v1/snapshots/{snapshot_id}/walkthrough": {"get": operation(
             "getWalkthrough", "Read purpose, mathematical model excerpts, notation, and proof support", parameters=[snapshot])},
+        "/api/v1/snapshots/{snapshot_id}/report": {"get": operation(
+            "getReviewReport", "Read a unified human/AI review package without advancing the workflow", parameters=[
+                snapshot, {"name": "format", "in": "query", "schema": {"enum": ["json", "markdown", "html"], "default": "json"}},
+                {"name": "workflow_id", "in": "query", "schema": {"type": "string"}},
+                {"name": "download", "in": "query", "schema": {"enum": ["0", "1"], "default": "0"}},
+            ])},
         "/api/v1/snapshots/{snapshot_id}/scenarios": {"post": operation(
             "simulateScenario", "Evaluate an example in the captured mathematical model without executing target code", True,
             {"type": "object", "additionalProperties": False, "required": ["model_id", "inputs"],
@@ -94,6 +100,11 @@ def openapi_document() -> dict:
         ])},
     }
     root = "/api/v1/snapshots/{snapshot_id}/workflows"
+    paths["/api/v1/snapshots/{snapshot_id}/report"]["get"]["responses"]["200"]["content"] = {
+        "application/json": {"schema": {"type": "object"}},
+        "text/markdown": {"schema": {"type": "string"}},
+        "text/html": {"schema": {"type": "string"}},
+    }
     paths[root] = {
         "get": operation("listWorkflows", "Read versioned DAG runs and their immutable artifact/event projections", parameters=[snapshot]),
         "post": operation("createWorkflow", "Pin objective, requirements, prompts, and snapshot in a new DAG run", True,

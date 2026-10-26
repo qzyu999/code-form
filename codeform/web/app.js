@@ -29,7 +29,7 @@ const icon = (name) => `<svg class="icon" viewBox="0 0 24 24" fill="none" stroke
 const esc = (value) => String(value ?? "").replace(/[&<>"']/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]);
 const badge = (value) => `<span class="badge ${esc(value)}">${esc(value)}</span>`;
 const state = { view: "walkthrough", snapshots: [], examples: [], record: null, token: "", workspace: "", search: "", severity: "all", status: "all", graphKind: "imports", selectedComponent: null, busy: false, proofBusy: false, diff: null, error: "", drawer: null, proof_checker: null };
-const titles = { walkthrough: "System walkthrough", workflow: "Analysis workflow", overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", agents: "Agent workspace", compare: "Snapshot comparison" };
+const titles = { walkthrough: "System walkthrough", report: "Review report", workflow: "Analysis workflow", overview: "System overview", architecture: "Architecture", claims: "Claim ledger", findings: "Findings", behavior: "Behavior & invariants", proofs: "Proofs & mathematics", agents: "Agent workspace", compare: "Snapshot comparison" };
 let toastTimer, lastFocus;
 let snapshotLoadGeneration = 0;
 
@@ -66,7 +66,7 @@ function notice(text) { return `<div class="notice">${icon("info")}<span>${esc(t
 
 function shell(content) {
   const findings = state.record?.bundle.summary.findings;
-  const nav = [["walkthrough", "activity", "Start here"], ["workflow", "graph", "Analysis DAG"], ["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["agents", "code", "Agent workspace"], ["compare", "compare", "Compare"]];
+  const nav = [["walkthrough", "activity", "Start here"], ["report", "file", "Review report"], ["workflow", "graph", "Analysis DAG"], ["overview", "grid", "Overview"], ["architecture", "graph", "Architecture"], ["claims", "ledger", "Claim ledger"], ["findings", "warning", "Findings"], ["behavior", "activity", "Behavior"], ["proofs", "shield", "Proofs & mathematics"], ["agents", "code", "Agent workspace"], ["compare", "compare", "Compare"]];
   return `<div class="app-shell"><aside class="sidebar">
     <a class="brand" href="/" aria-label="code-form home"><span class="brand-mark">${icon("cube")}</span><span class="brand-name">code-form<span class="muted">.</span></span></a>
     <div class="workspace-label">SYSTEM EXPLORER</div>
@@ -82,6 +82,7 @@ function shell(content) {
 function header() {
   const subtitles = {
     walkthrough: "Connect purpose, examples, mathematical objects, and the implementation that gives them meaning.",
+    report: "Purpose, proposed mathematics, architecture, evidence, and actual checker coverage in one readable report.",
     workflow: "One versioned DAG: parallel work, pinned evidence, and explicit human review gates.",
     overview: "A traceable view of your codebase, from structure to the questions worth asking.",
     architecture: "Follow the dependencies. Inspect the components. Trace relationships to code.",
@@ -95,7 +96,7 @@ function header() {
   const id = state.record?.bundle.id;
   return `<div class="page-header"><div><div class="eyebrow">Repository intelligence</div><h1>${titles[state.view]}</h1><p class="subtitle">${subtitles[state.view]}</p></div>
     <div class="header-actions">${id ? `<div class="export-wrap"><button class="btn" data-action="export">${icon("download")}Export ${icon("down")}</button><div class="export-menu hidden" id="export-menu">
-      <a href="/api/snapshots/${id}/export?format=json">Analysis bundle · JSON</a><a href="/api/snapshots/${id}/export?format=markdown">Review report · Markdown</a><a href="/api/snapshots/${id}/export?format=architecture">Architecture · Mermaid</a><a href="/api/snapshots/${id}/export?format=sequence">Call flow · Mermaid</a></div></div>` : ""}
+      <a href="/reports/${id}" target="_blank" rel="noopener">Unified review report</a><a href="/api/v1/snapshots/${id}/report?format=json">Review report · JSON</a><a href="/api/snapshots/${id}/export?format=json">Analysis bundle · JSON</a><a href="/api/snapshots/${id}/export?format=markdown">Structural findings · Markdown</a><a href="/api/snapshots/${id}/export?format=architecture">Architecture · Mermaid</a><a href="/api/snapshots/${id}/export?format=sequence">Call flow · Mermaid</a></div></div>` : ""}
       <button class="btn primary" data-action="new" ${state.busy ? "disabled" : ""}>${icon("plus")}Analyze repository</button></div></div>`;
 }
 function snapshotBar() {
@@ -226,12 +227,43 @@ function proofs() {
   const artifacts = report?.artifacts || state.record.proof_plan || [];
   const summary = report?.summary;
   const checker = state.proof_checker;
-  return `<div class="proof-intro panel padded"><div><div class="eyebrow">Mathematical reasoning</div><h2>Assumptions → definitions → checked conclusions</h2><p class="model-note">Proofs are tied to this snapshot. Each result states what it establishes, how it was checked, and which assumptions remain.</p></div><div class="proof-actions"><button class="btn primary" data-action="verify" ${state.proofBusy || !checker?.available || !artifacts.length ? "disabled" : ""}>${icon("shield")}${state.proofBusy ? "Checking with Lean…" : "Check proofs with Lean"}</button>${report ? `<button class="btn" data-action="proof-report">${icon("download")}Export proof report</button>` : ""}<span class="model-note">${checker?.available ? `Local Lean ${esc(checker.version)}` : esc(checker?.error || "Lean unavailable")}</span></div></div>
+  const coverage = state.record.proof_status;
+  const supported = (state.record.proof_plan || []).filter(a => a.status !== "unsupported");
+  return `<div class="proof-intro panel padded"><div><div class="eyebrow">Mathematical reasoning</div><h2>Assumptions → definitions → checked conclusions</h2><p class="model-note">Proofs are tied to this snapshot. Each result states what it establishes, how it was checked, and which assumptions remain.</p></div><div class="proof-actions"><button class="btn primary" data-action="verify" ${state.proofBusy || !checker?.available || !supported.length ? "disabled" : ""}>${icon("shield")}${state.proofBusy ? "Checking with Lean…" : "Check proofs with Lean"}</button>${report ? `<button class="btn" data-action="proof-report">${icon("download")}Export proof report</button>` : ""}<span class="model-note">${checker?.available ? `Local Lean ${esc(checker.version)}` : esc(checker?.error || "Lean unavailable")}</span></div></div>
+    ${coverage ? notice(coverage.explanation) : ""}
     ${state.proofBusy ? '<div class="progress-panel"><span class="loading-pulse"></span>Lean is checking complete proofs and their transitive axiom dependencies…</div>' : ""}
     ${summary ? `<div class="metrics">${[["proved", "Checked conclusions"], ["disproved", "Checked counterexamples"], ["unsupported", "Unsupported obligations"], ["error", "Checker errors"]].map(([key, label]) => `<div class="metric"><div class="metric-label">${icon(key === "proved" ? "shield" : "info")}${label}</div><div class="metric-value">${summary[key]}</div><div class="metric-detail">${key === "proved" ? "Accepted by Lean under the stated scope" : key === "disproved" ? "Concrete witness accepted by Lean" : "No correctness conclusion established"}</div></div>`).join("")}</div>` : ""}
-    ${!artifacts.length ? `<div class="panel empty"><h3>No supported proof obligations in this snapshot</h3><p>Analyze verified-transfer for integer theorems and a repair comparison,<br>or verified-workflow for induction over every finite event sequence.</p><button class="btn" data-action="new">${icon("plus")}Analyze a proof example</button></div>` : `<div class="proof-artifacts">${artifacts.map(proofCard).join("")}</div>`}
+    ${!supported.length ? `<div class="panel empty"><h3>Formal model adapter needed</h3><p>The checker has no supported theorem to check for these operations.<br>Proposed formulas and mathematical analysis are in the review report.</p><button class="btn primary" data-view="report">${icon("file")}Read the review report</button><p class="model-note">For checked examples, analyze verified-transfer or verified-workflow.</p></div>` : `<div class="proof-artifacts">${artifacts.map(proofCard).join("")}</div>`}
     ${notice("Lean checks the emitted mathematical model. The source adapter is a stated trusted boundary; arbitrary Python, persistence, concurrent updates, and runtime type enforcement are outside these proofs.")}`;
 }
+function reviewReport() {
+  const id = state.record.bundle.id;
+  const runs = state.record.workflow_runs || [];
+  const preview = runs.filter(r => r.mode === "preview" && r.state === "preview_complete").at(-1);
+  const selected = preview || runs.filter(r => r.state !== "superseded").at(-1) || runs.at(-1);
+  const query = selected ? `?workflow_id=${selected.id}` : "";
+  const suffix = selected ? `&workflow_id=${selected.id}` : "";
+  const coverage = state.record.proof_status;
+  const guide = [
+    ["Start here", "Purpose, documented requirements, and concrete supported examples."],
+    ["Analysis DAG", "Submitted agent analysis, proposed mathematics, dependencies, and human review gates."],
+    ["Overview", "Static inventory and heuristic priorities."],
+    ["Architecture", "Static imports and resolved calls; operational design appears in the report."],
+    ["Claim ledger", "AST-extracted facts with source evidence."],
+    ["Findings", "Investigation candidates; direct test-reference gaps do not measure coverage."],
+    ["Behavior", "Static call flows and recognized literal state transition tables."],
+    ["Proofs & mathematics", "Supported fixed obligations and actual Lean checker results."],
+    ["Agent workspace", "Standalone attempts and proposals, separate from DAG submissions."],
+    ["Compare", "Changes in source and structure between snapshots."],
+  ];
+  return `<section class="panel padded"><div class="eyebrow">Human and AI review</div><h2>Read the system as one report</h2><p>Start with purpose, follow the proposed model and architecture, inspect mathematics and captured source, then review counterexample candidates, test plans, and checker coverage.</p>
+    ${selected ? `<p class="model-note">Selected run <code>${esc(selected.id)}</code> · ${esc(selected.mode || "review")} · ${esc(selected.state)}. The report defaults to the latest completed preview when available. Each DAG run also links to its own report.</p>` : "<p>No workflow artifacts yet; the report contains static analysis and supported model excerpts.</p>"}
+    ${preview ? notice("The complete preview contains manually supplied agent analysis. It is not owner-approved, and completed stages are not program verification.") : ""}
+    <div class="agent-links"><a class="btn primary" href="/reports/${id}${query}" target="_blank" rel="noopener">Open readable report ${icon("arrow")}</a><a href="/api/v1/snapshots/${id}/report?format=html${suffix}&download=1">Save standalone HTML</a><a href="/api/v1/snapshots/${id}/report?format=markdown${suffix}">Markdown</a><a href="/api/v1/snapshots/${id}/report?format=json${suffix}">JSON for AI review</a></div><p class="model-note">Standalone HTML includes rendered LaTeX and its full JSON companion, works offline, and can be printed to PDF. Supported models include their Lean inputs and actual checker certificates.</p></section>
+    <section class="panel padded agent-section"><h2>Why might the proof view be empty?</h2><p>${esc(coverage?.explanation || "Checker results require supported source-to-model obligations.")}</p><p>Proposed formulas are reviewable specifications. The Proofs tab shows properties the installed adapters can actually send to Lean. A larger repository needs reviewed models and source-to-model bridges for its operations.</p></section>
+    <section class="panel padded agent-section"><h2>What each tab shows</h2><div class="table-wrap"><table><thead><tr><th>Tab</th><th>Meaning</th></tr></thead><tbody>${guide.map(([name, meaning]) => `<tr><td>${esc(name)}</td><td>${esc(meaning)}</td></tr>`).join("")}</tbody></table></div></section>`;
+}
+
 function proofCard(artifact) {
   if (artifact.status === "unsupported") return `<article class="panel padded"><div class="section-heading"><h2>${esc(artifact.name)}</h2>${badge("unsupported")}</div><p class="model-note">${esc(artifact.reason)}</p></article>`;
   const checked = ["proved", "disproved"].includes(artifact.status);
@@ -253,6 +285,7 @@ function agentWorkspace() {
   const work = state.record.agent_work || { attempts: [], proposals: [] };
   const id = state.record.bundle.id;
   return `<div class="panel padded"><div class="section-heading"><div><h2>One API for reasoning tools</h2><p>External agents inspect evidence, choose proof strategies, and submit drafts for review.</p></div><button class="btn" data-action="refresh-agents">${icon("refresh")}Refresh agent work</button></div><div class="agent-links"><a href="/api/v1/openapi.json" target="_blank" rel="noopener">OpenAPI contract ${icon("arrow")}</a><a href="/api/v1/snapshots/${id}/context" target="_blank" rel="noopener">Agent context ${icon("arrow")}</a><a href="/api/v1/snapshots/${id}/obligations" target="_blank" rel="noopener">Fixed obligations ${icon("arrow")}</a></div><p class="model-note">The agent supplies reasoning. The server owns the source snapshot, exact theorem statements, checker execution, and review history.</p></div>
+    ${state.record.workflow_runs?.length ? `<div class="notice agent-section"><span>DAG role submissions are stored in Analysis DAG. This tab shows standalone proof attempts and proposals. <button class="text-link" data-view="report">Read both in the review report ${icon("arrow")}</button></span></div>` : ""}
     <div class="section-heading agent-section"><h2>Proof attempts · ${work.attempts.length}</h2></div><div class="panel">
     ${work.attempts.map(attempt => `<details class="agent-attempt"><summary><span class="mono">${esc(attempt.strategy)}</span> ${badge(attempt.status)}<span>${esc(attempt.statement)}</span><small class="muted">${esc(attempt.agent)}</small></summary><div class="padded"><p class="model-note">Fixed obligation <code>${esc(attempt.obligation_id)}</code><br>Attempt <code>${esc(attempt.id)}</code> · ${timeLabel(attempt.created_at)}<br>${esc(attempt.scope)}</p>${attempt.checker?.stdout ? `<pre class="lean-preview">${esc(attempt.checker.stdout)}</pre>` : ""}${attempt.error ? `<p class="error-message">${esc(attempt.error)}</p>` : ""}<p class="model-note">This attempt is recorded separately from the complete snapshot verification report.</p></div></details>`).join("") || '<div class="empty">No agent proof attempts yet. Use the API client or CLI to submit a strategy against a fixed obligation.</div>'}</div>
     <div class="section-heading agent-section"><h2>Proposals · ${work.proposals.length}</h2></div><div class="proof-artifacts">
@@ -275,6 +308,7 @@ function render() {
   const content = state.loadingSnapshot ? '<div class="boot">Loading the selected captured snapshot…</div>' : !state.record ? welcome() : header() + snapshotBar() + (state.busy ? '<div class="progress-panel"><span class="loading-pulse"></span>Parsing repository and linking evidence…</div>' : "") + ({
     walkthrough: () => window.CodeFormWalkthrough.render(state.record),
     workflow: () => window.CodeFormWorkflows.render(state.record),
+    report: reviewReport,
     overview, architecture, claims: () => toolbar("claims") + notice("Epistemic status describes the kind of support, not a confidence score. Observed source, proposed behavior, test results, and checked proofs are different claims."),
     findings: () => toolbar("findings") + notice("Accept a finding to export a bounded task specification with evidence and acceptance criteria. Review notes do not alter the original analysis."),
     behavior, proofs, agents: agentWorkspace, compare: compareView,

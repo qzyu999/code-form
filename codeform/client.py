@@ -122,6 +122,12 @@ class CodeFormClient:
     def verification(self, snapshot_id: str):
         return self._request(f"/api/v1/snapshots/{snapshot_id}/verification")
 
+    def report(self, snapshot_id: str, workflow_id=None):
+        query = {"format": "json"}
+        if workflow_id:
+            query["workflow_id"] = workflow_id
+        return self._request(f"/api/v1/snapshots/{snapshot_id}/report?{urlencode(query)}")
+
     def compare(self, before: str, after: str):
         return self._request(f"/api/v1/compare?{urlencode({'before': before, 'after': after})}")
 
