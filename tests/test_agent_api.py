@@ -121,6 +121,25 @@ class AgentApiTests(unittest.TestCase):
             self.client._request(f"/api/v1/snapshots/{self.snapshot}/scenarios",
                                  {"model_id": model["id"], "inputs": {}, "execute": True})
 
+    def test_workflow_api_pins_inputs_and_records_first_human_gate(self):
+        created = self.client.create_workflow(self.snapshot, "Review this captured transfer model.")
+        result = self.client.wait(self.client.advance_workflow(self.snapshot, created["id"]))
+        self.assertEqual("complete", result["status"])
+        context = self.client.workflow_context(self.snapshot, created["id"], "model")
+        self.assertEqual("awaiting_agent", context["status"])
+        output = {
+            "snapshot_id": self.snapshot, "spec_sha256": context["spec_sha256"],
+            "input_sha256": context["input_sha256"], "actor": "API fixture agent",
+            "summary": "A source-linked model draft.",
+            "claims": [{"statement": "The source subtracts the transfer amount.",
+                        "status": "observed", "evidence": [{"path": "transfer.py", "line_start": 4, "line_end": 8}]}],
+        }
+        run = self.client.workflow_output(self.snapshot, created["id"], "model", output)
+        self.assertEqual("awaiting_review", run["state"])
+        self.assertEqual(1, len(self.client.workflows(self.snapshot)))
+        with self.assertRaises(ApiError):
+            self.client.workflow_output(self.snapshot, created["id"], "model", output)
+
     def test_versioned_mutations_require_token_and_origin_check(self):
         self.client.token = ""
         with self.assertRaises(ApiError) as error:

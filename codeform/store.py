@@ -3,14 +3,21 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import os
 import re
 import threading
+from collections import OrderedDict
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 
 from .model import canonical_json, validate_bundle
 
+AGENT_PREFIXES = {
+    "attempts": "attempt", "proposals": "proposal", "reviews": "review",
+    "workflows": "workflow", "workflow_events": "event", "workflow_artifacts": "artifact",
+}
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
@@ -21,6 +28,7 @@ class Store:
         self.path = path.resolve()
         self.path.mkdir(parents=True, exist_ok=True)
         self.lock = threading.RLock()
+        self._bundle_cache = OrderedDict()
 
     def _path(self, identifier: str, suffix: str = ".json") -> Path:
         if not re.fullmatch(r"snapshot_[0-9a-f]{16}", identifier):
@@ -50,13 +58,29 @@ class Store:
                 self._write(target, {"created_at": utc_now(), "bundle": bundle})
             return self.get(bundle["id"])
 
-    def get(self, identifier: str) -> dict:
+    def _read_record(self, identifier: str) -> dict:
         try:
-            record = json.loads(self._path(identifier).read_text(encoding="utf-8"))
+            raw = self._path(identifier).read_bytes()
         except FileNotFoundError as error:
             raise KeyError("Snapshot not found.") from error
+        digest = hashlib.sha256(raw).hexdigest()
+        with self.lock:
+            cached = self._bundle_cache.get(identifier)
+            if cached and cached[0] == digest:
+                self._bundle_cache.move_to_end(identifier)
+                return cached[1]
+        record = json.loads(raw.decode("utf-8"))
         validate_bundle(record["bundle"])
+        with self.lock:
+            self._bundle_cache[identifier] = (digest, record)
+            self._bundle_cache.move_to_end(identifier)
+            while len(self._bundle_cache) > 8:
+                self._bundle_cache.popitem(last=False)
         return record
+
+    def get(self, identifier: str) -> dict:
+        # Callers can annotate their copy without mutating the validated cache.
+        return deepcopy(self._read_record(identifier))
 
     def list(self) -> list[dict]:
         records = []
@@ -105,8 +129,8 @@ class Store:
             self._write(self._path(identifier, ".verification.json"), report)
 
     def _agent_directory(self, identifier: str, kind: str) -> Path:
-        self.get(identifier)
-        if kind not in {"attempts", "proposals", "reviews"}:
+        self._read_record(identifier)
+        if kind not in AGENT_PREFIXES:
             raise ValueError("Invalid agent record collection.")
         target = self.path / "agents" / identifier / kind
         for part in (target.parent.parent, target.parent, target):
@@ -117,14 +141,14 @@ class Store:
     def agent_records(self, identifier: str, kind: str) -> list[dict]:
         target = self._agent_directory(identifier, kind)
         records = []
-        prefix = {"attempts": "attempt", "proposals": "proposal", "reviews": "review"}[kind]
+        prefix = AGENT_PREFIXES[kind]
         for path in target.glob(f"{prefix}_*.json"):
             records.append(self.agent_record(identifier, kind, path.stem))
         return sorted(records, key=lambda r: (r["created_at"], r["id"]))
 
     def agent_record(self, identifier: str, kind: str, record_id: str) -> dict:
         directory = self._agent_directory(identifier, kind)
-        prefix = {"attempts": "attempt", "proposals": "proposal", "reviews": "review"}[kind]
+        prefix = AGENT_PREFIXES[kind]
         if not isinstance(record_id, str) or not re.fullmatch(rf"{prefix}_[0-9a-f]{{16}}", record_id):
             raise ValueError("Invalid agent record identifier.")
         target = directory / f"{record_id}.json"
@@ -140,7 +164,7 @@ class Store:
 
     def save_agent_record(self, identifier: str, kind: str, record: dict) -> dict:
         directory = self._agent_directory(identifier, kind)
-        prefix = {"attempts": "attempt", "proposals": "proposal", "reviews": "review"}[kind]
+        prefix = AGENT_PREFIXES[kind]
         record_id = record.get("id")
         if not isinstance(record_id, str) or not re.fullmatch(rf"{prefix}_[0-9a-f]{{16}}", record_id):
             raise ValueError("Invalid agent record identifier.")

@@ -26,6 +26,8 @@ jobs:
       - run: node --check codeform/web/app.js
       - run: node --check codeform/web/walkthrough.js
       - run: node --check codeform/web/math.js
+      - run: node --check codeform/web/workflows.js
+      - run: node --check codeform/web/report.js
   lean-proofs:
     runs-on: ubuntu-latest
     steps:
@@ -47,3 +49,4 @@ jobs:
           .venv/bin/python -c "from codeform.proofs import checker_info,find_lean; assert checker_info(find_lean())['available']"
           .venv/bin/python -m unittest discover -s tests -p test_proofs.py -v
           .venv/bin/python -m unittest discover -s tests -p test_agent_api.py -v
+          .venv/bin/python -m unittest discover -s tests -p test_workflows.py -v

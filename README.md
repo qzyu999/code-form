@@ -46,6 +46,12 @@ The default **Start here** view presents documented purpose, supported
 mathematical model excerpts, LaTeX notation, scenarios, and Lean/source evidence.
 See [the walkthrough guide](docs/math-first-walkthrough.md).
 
+Open **Review report** to read purpose, proposed mathematics, architecture,
+source evidence, test plans, and actual Lean coverage together. Export
+standalone HTML (offline LaTeX and embedded JSON), Markdown, or a full JSON
+package for AI review. See [review reports](docs/review-reports.md).
+An unsupported formal model is distinct from a checker that has not run.
+
 On Windows, `.\scripts\setup.ps1` creates the environment and
 `.\scripts\start.ps1` starts the demo. Activation and installation are optional.
 The environment uses `--without-pip` because the app needs no installed packages.
@@ -70,6 +76,7 @@ To reopen the demo storage used during development, add
 | View | Behavior |
 | --- | --- |
 | Start here | Guided purpose → mathematical objects → intended properties → examples → argument → Lean and source. |
+| Analysis DAG | Pinned workflow runs, parallel-ready tasks, role prompts, immutable artifacts, validation, and human gates. |
 | Overview | Repository metadata, model counts, dependency map, and priority findings. |
 | Architecture | Module imports, resolved calls, direct test references, and component source. |
 | Claim ledger | Search statements, filter epistemic status, and open supporting evidence. |
@@ -147,6 +154,11 @@ future MCP/Codex adapters.
 The authored client demo checks a fixed goal, reads diagnostics, retries, and
 saves a draft repair visible in **Agent workspace**. It does not call a model
 or edit source. OpenAPI is served at `/api/v1/openapi.json`.
+
+The [DAG workflow](docs/workflow-dag.md) coordinates those tools by dependency:
+facts and requirements → model draft → human review → parallel analysis roles
+→ validation → synthesis → human proposal review. Built-ins run locally;
+external agent nodes explicitly wait for submissions.
 
 ## CLI
 

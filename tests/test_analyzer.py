@@ -158,6 +158,22 @@ class AnalyzerTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 store.save(altered)
 
+    def test_snapshot_cache_is_copy_safe_and_revalidates_changed_content(self):
+        with TemporaryWorkspace() as temporary:
+            store = Store(Path(temporary))
+            bundle = analyze_repository(ROOT / "examples/order-workflow")
+            store.save(bundle)
+            mutable = store.get(bundle["id"])
+            mutable["bundle"]["claims"][0]["statement"] = "Changed only in caller copy"
+            self.assertNotEqual(mutable, store.get(bundle["id"]))
+            path = store.path / f"{bundle['id']}.json"
+            import json
+            record = json.loads(path.read_text(encoding="utf-8"))
+            record["bundle"]["sources"][0]["content"] = "tampered"
+            path.write_text(json.dumps(record), encoding="utf-8")
+            with self.assertRaises(ValueError):
+                store.get(bundle["id"])
+
     def test_git_commit_and_working_tree_content_are_separate(self):
         with TemporaryWorkspace() as temporary:
             root = Path(temporary)
@@ -172,6 +188,29 @@ class AnalyzerTests(unittest.TestCase):
             self.assertEqual(before["repository"]["commit_sha"], after["repository"]["commit_sha"])
             self.assertNotEqual(before["id"], after["id"])
             self.assertTrue(after["repository"]["dirty"])
+
+    def test_subdirectory_snapshot_ignores_unrelated_git_changes(self):
+        with TemporaryWorkspace() as temporary:
+            parent = Path(temporary)
+            target = parent / "project"
+            target.mkdir()
+            (target / "main.py").write_text("def run():\n    return 1\n", encoding="utf-8")
+            subprocess.run(["git", "init", "-q", str(parent)], check=True)
+            subprocess.run(["git", "-C", str(parent), "add", "project/main.py"], check=True)
+            subprocess.run(["git", "-C", str(parent), "-c", "user.name=Test", "-c", "user.email=test@example.invalid",
+                            "-c", "core.hooksPath=/dev/null", "commit", "-qm", "fixture"], check=True)
+            before = analyze_repository(target)
+            (parent / "unrelated.txt").write_text("outside analysis scope", encoding="utf-8")
+            after = analyze_repository(target)
+            self.assertEqual(canonical_json(before), canonical_json(after))
+            (target / "unsupported.bin").write_bytes(b"untracked metadata change")
+            dirty = analyze_repository(target)
+            self.assertTrue(dirty["repository"]["dirty"])
+            self.assertEqual(before["repository"]["content_sha256"], dirty["repository"]["content_sha256"])
+            self.assertNotEqual(before["id"], dirty["id"])
+            store = Store(parent / ".codeform")
+            store.save(before)
+            store.save(dirty)
 
 
 if __name__ == "__main__":

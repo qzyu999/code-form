@@ -7,6 +7,8 @@ from .agent_api import API_VERSION
 
 def openapi_document() -> dict:
     snapshot = {"name": "snapshot_id", "in": "path", "required": True, "schema": {"type": "string"}}
+    workflow = {"name": "workflow_id", "in": "path", "required": True, "schema": {"type": "string"}}
+    node = {"name": "node_id", "in": "path", "required": True, "schema": {"type": "string"}}
     json_response = {"description": "JSON response", "content": {"application/json": {"schema": {"type": "object"}}}}
 
     def operation(name, description, mutation=False, schema=None, parameters=None):
@@ -43,6 +45,7 @@ def openapi_document() -> dict:
                     "parent_id": {"type": "string"},
                 }}
     paths = {
+        "/api/v1/workflow-templates": {"get": operation("getWorkflowTemplates", "DAG template, prompts, executor types, and limits")},
         "/api/v1/capabilities": {"get": operation("capabilities", "Available operations, checker, and limitations")},
         "/api/v1/snapshots": {
             "get": operation("listSnapshots", "List immutable repository snapshots"),
@@ -60,6 +63,12 @@ def openapi_document() -> dict:
         "/api/v1/snapshots/{snapshot_id}/context": {"get": operation("getAgentContext", "Versioned instructions and reasoning context", parameters=[snapshot])},
         "/api/v1/snapshots/{snapshot_id}/walkthrough": {"get": operation(
             "getWalkthrough", "Read purpose, mathematical model excerpts, notation, and proof support", parameters=[snapshot])},
+        "/api/v1/snapshots/{snapshot_id}/report": {"get": operation(
+            "getReviewReport", "Read a unified human/AI review package without advancing the workflow", parameters=[
+                snapshot, {"name": "format", "in": "query", "schema": {"enum": ["json", "markdown", "html"], "default": "json"}},
+                {"name": "workflow_id", "in": "query", "schema": {"type": "string"}},
+                {"name": "download", "in": "query", "schema": {"enum": ["0", "1"], "default": "0"}},
+            ])},
         "/api/v1/snapshots/{snapshot_id}/scenarios": {"post": operation(
             "simulateScenario", "Evaluate an example in the captured mathematical model without executing target code", True,
             {"type": "object", "additionalProperties": False, "required": ["model_id", "inputs"],
@@ -90,6 +99,53 @@ def openapi_document() -> dict:
             {"name": name, "in": "query", "required": True, "schema": {"type": "string"}} for name in ("before", "after")
         ])},
     }
+    root = "/api/v1/snapshots/{snapshot_id}/workflows"
+    paths["/api/v1/snapshots/{snapshot_id}/report"]["get"]["responses"]["200"]["content"] = {
+        "application/json": {"schema": {"type": "object"}},
+        "text/markdown": {"schema": {"type": "string"}},
+        "text/html": {"schema": {"type": "string"}},
+    }
+    paths[root] = {
+        "get": operation("listWorkflows", "Read versioned DAG runs and their immutable artifact/event projections", parameters=[snapshot]),
+        "post": operation("createWorkflow", "Pin objective, requirements, prompts, and snapshot in a new DAG run", True,
+                          {"type": "object", "required": ["objective"], "additionalProperties": False,
+                           "properties": {"objective": {"type": "string", "maxLength": 4000},
+                                          "mode": {"enum": ["review", "preview"], "default": "review"},
+                                          "parent_id": {"type": "string"}, "parent_snapshot_id": {"type": "string"},
+                                          "supersede_parent": {"type": "boolean"},
+                                          "prompt_overrides": {"type": "object"}}}, [snapshot]),
+    }
+    paths[root + "/{workflow_id}"] = {"get": operation("getWorkflow", "Read live dependency statuses and recorded artifacts", parameters=[snapshot, workflow])}
+    paths[root + "/{workflow_id}/advance"] = {"post": operation(
+        "advanceWorkflow", "Run ready read-only built-in nodes; stop at external or human gates", True,
+        {"type": "object", "maxProperties": 0}, [snapshot, workflow])}
+    path = root + "/{workflow_id}/nodes/{node_id}"
+    paths[path + "/context"] = {"get": operation("getWorkflowNodeContext", "Pinned role prompt, dependency artifacts, and input hash", parameters=[snapshot, workflow, node])}
+    paths[path + "/outputs"] = {"post": operation(
+        "submitWorkflowNodeOutput", "Submit an evidence-linked external-agent artifact against exact ready inputs", True,
+        {"type": "object", "additionalProperties": False, "required": ["snapshot_id", "spec_sha256", "input_sha256", "actor", "summary", "claims"],
+         "properties": {"snapshot_id": {"type": "string"}, "spec_sha256": {"type": "string"},
+                        "input_sha256": {"type": "string"}, "actor": {"type": "string"},
+                        "summary": {"type": "string"}, "claims": {"type": "array", "minItems": 1, "maxItems": 30,
+                            "items": {"type": "object", "additionalProperties": False,
+                                      "required": ["statement", "status", "evidence"],
+                                      "properties": {"statement": {"type": "string"},
+                                                     "status": {"enum": ["observed", "inferred", "proposed", "unknown"]},
+                                                     "evidence": {"type": "array", "items": evidence},
+                                                     "latex": {"type": ["string", "null"]}}}},
+                        "diagram": {"type": "object"}, "limitations": {"type": "array", "items": {"type": "string"}},
+                        "assumptions": {"type": "array", "items": {"type": "string"}},
+                        "test_plan": {"type": "array", "items": {"type": "string"}},
+                        "proposal_ids": {"type": "array", "items": {"type": "string"}},
+                        "obligation_ids": {"type": "array", "items": {"type": "string"}},
+                        "proof_attempt_ids": {"type": "array", "items": {"type": "string"}}}}, [snapshot, workflow, node])}
+    paths[path + "/reviews"] = {"post": operation(
+        "reviewWorkflowGate", "Review the exact model/synthesis artifact; no source execution is authorized", True,
+        {"type": "object", "additionalProperties": False, "required": ["snapshot_id", "spec_sha256", "artifact_id", "artifact_sha256", "actor", "decision", "note"],
+         "properties": {"snapshot_id": {"type": "string"}, "spec_sha256": {"type": "string"},
+                        "artifact_id": {"type": "string"}, "artifact_sha256": {"type": "string"},
+                        "actor": {"type": "string"}, "decision": {"enum": ["approved", "needs_changes"]},
+                        "note": {"type": "string"}}}, [snapshot, workflow, node])}
     paths["/api/v1/snapshots/{snapshot_id}/proposals"]["get"]["parameters"] = [snapshot]
     review_path = "/api/v1/snapshots/{snapshot_id}/proposals/{proposal_id}/reviews"
     paths[review_path]["get"] = operation(
@@ -117,7 +173,7 @@ def openapi_document() -> dict:
             "properties": {
                 "id": {"type": ["string", "null"]},
                 "status": {"enum": ["queued", "running", "complete", "failed"]},
-                "kind": {"enum": ["verification", "attempt"]},
+                "kind": {"enum": ["verification", "attempt", "workflow"]},
                 "snapshot_id": {"type": "string"}, "attempt_id": {"type": "string"},
                 "result_status": {"type": "string"}, "error": {"type": "string"}, "reused": {"type": "boolean"},
             },

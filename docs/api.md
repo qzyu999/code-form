@@ -9,6 +9,13 @@ The API calls no model and needs no OpenAI API key. An external agent supplies
 reasoning using its own configured model connection. This release provides
 tools and records, not an automatic model-driven research agent.
 
+`GET /api/v1/snapshots/{snapshot_id}/report` joins the saved analysis,
+selected workflow, review state, and checker coverage for human/AI review.
+Use `format=json|markdown|html`, optional `workflow_id`, and `download=1`
+for standalone HTML. The client exposes `report(snapshot_id, workflow_id)`;
+the CLI exposes `api report ... --output DIRECTORY`.
+See [review-reports.md](review-reports.md) for selection, provenance, and exports.
+
 ## Start
 
 Use the checkout's local virtual environment:
@@ -277,6 +284,11 @@ An external Codex session or another agent can use these tools:
 The service does not launch Codex automatically or consume a model API key.
 A future Codex CLI/SDK or MCP adapter can orchestrate these same operations
 without duplicating analysis or checker semantics.
+
+The [DAG workflow API](workflow-dag.md) pins these tasks to a dependency graph
+with role prompts, immutable outputs, actual checker references, and exact
+human review gates. It supports read-only parallel built-ins and external
+agent submissions; it does not itself launch a model.
 
 ## Validation
 

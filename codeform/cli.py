@@ -10,6 +10,7 @@ from .server import Application, make_server
 from .store import Store
 from .proofs import find_lean, verify_bundle
 from .client import CodeFormClient, ApiError
+from .reports import report_html, report_markdown as review_markdown
 
 
 def main(argv: list[str] | None = None) -> int:
@@ -41,10 +42,14 @@ def main(argv: list[str] | None = None) -> int:
     actions = api.add_subparsers(dest="api_action", required=True)
     actions.add_parser("capabilities", help="Show available tools and limits.")
     actions.add_parser("snapshots", help="List saved snapshots.")
+    api_report = actions.add_parser("report", help="Read a unified review report or export HTML, Markdown, and JSON.")
+    api_report.add_argument("snapshot_id")
+    api_report.add_argument("--workflow-id", help="Pin the workflow; default prefers the latest complete preview.")
+    api_report.add_argument("--output", "-o", type=Path, help="Export a standalone human report and its machine-readable companion.")
     api_analyze = actions.add_parser("analyze", help="Queue analysis through the service.")
     api_analyze.add_argument("path")
     api_analyze.add_argument("--wait", action="store_true")
-    for action in ("snapshot", "context", "walkthrough", "obligations", "attempts", "proposals"):
+    for action in ("snapshot", "context", "walkthrough", "obligations", "attempts", "proposals", "workflows"):
         command = actions.add_parser(action)
         command.add_argument("snapshot_id")
     source = actions.add_parser("source", help="Read captured evidence.")
@@ -68,6 +73,20 @@ def main(argv: list[str] | None = None) -> int:
     review.add_argument("--decision", choices=("accepted", "rejected", "needs_changes"), required=True)
     review.add_argument("--note", required=True)
     review.add_argument("--reviewer", required=True)
+    workflow = actions.add_parser("workflow", help="Read a dependency-controlled workflow run.")
+    workflow.add_argument("snapshot_id")
+    workflow.add_argument("workflow_id")
+    wf_context = actions.add_parser("workflow-context", help="Read a node's pinned role prompt and input artifacts.")
+    wf_context.add_argument("snapshot_id")
+    wf_context.add_argument("workflow_id")
+    wf_context.add_argument("node_id")
+    wf_create = actions.add_parser("workflow-create", help="Create an immutable analysis DAG.")
+    wf_create.add_argument("snapshot_id")
+    wf_create.add_argument("--objective", required=True)
+    wf_advance = actions.add_parser("workflow-advance", help="Run ready read-only built-ins.")
+    wf_advance.add_argument("snapshot_id")
+    wf_advance.add_argument("workflow_id")
+    wf_advance.add_argument("--wait", action="store_true")
     args = parser.parse_args(argv)
     try:
         if args.command == "api":
@@ -79,7 +98,7 @@ def main(argv: list[str] | None = None) -> int:
                 result = client.analyze(args.path)
                 if args.wait:
                     result = client.wait(result)
-            elif action in {"snapshot", "context", "walkthrough", "obligations", "attempts", "proposals"}:
+            elif action in {"snapshot", "context", "walkthrough", "obligations", "attempts", "proposals", "workflows"}:
                 result = getattr(client, action)(args.snapshot_id)
             elif action == "source":
                 result = client.source(args.snapshot_id, args.path, args.start, args.end)
@@ -99,6 +118,25 @@ def main(argv: list[str] | None = None) -> int:
                 result = client.propose(args.snapshot_id, payload)
             elif action == "review":
                 result = client.review(args.snapshot_id, args.proposal_id, args.decision, args.note, args.reviewer)
+            elif action == "workflow":
+                result = client.workflow(args.snapshot_id, args.workflow_id)
+            elif action == "workflow-context":
+                result = client.workflow_context(args.snapshot_id, args.workflow_id, args.node_id)
+            elif action == "workflow-create":
+                result = client.create_workflow(args.snapshot_id, args.objective)
+            elif action == "workflow-advance":
+                result = client.advance_workflow(args.snapshot_id, args.workflow_id)
+                if args.wait:
+                    result = client.wait(result)
+            elif action == "report":
+                result = client.report(args.snapshot_id, args.workflow_id)
+                if args.output:
+                    args.output.mkdir(parents=True, exist_ok=True)
+                    (args.output / "review-report.json").write_text(json.dumps(result, indent=2, ensure_ascii=False) + "\n", encoding="utf-8")
+                    (args.output / "review-report.md").write_text(review_markdown(result), encoding="utf-8")
+                    (args.output / "review-report.html").write_text(report_html(result, standalone=True), encoding="utf-8")
+                    print(f"Review report exported to {args.output.resolve()}")
+                    return 0
             print(json.dumps(result, indent=2, ensure_ascii=False))
         elif args.command == "analyze":
             bundle = analyze_repository(args.repository)

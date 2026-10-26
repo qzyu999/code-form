@@ -46,6 +46,9 @@ The repository content hash combines sorted path/hash pairs. Snapshot IDs
 combine repository path, source content hash, Git commit, analyzer version,
 implementation hash, and Python runtime version. Analysis timestamps are stored
 outside the bundle to keep repeated analysis deterministic.
+Git dirty metadata is scoped to the analyzed directory and participates in
+snapshot identity, so unrelated parent-repository edits cannot cause a
+same-ID/different-metadata collision.
 
 Git SHA identifies the baseline, not necessarily the exact working tree.
 Captured sources and content hashes identify what was actually analyzed.
@@ -125,6 +128,20 @@ declarations and controlled strategies. Clients submit IDs and hashes rather
 than executable Lean. Attempts and proposals persist as separate immutable
 records; review appends new records without promoting drafts to proofs.
 See [api.md](api.md) for integration and limits.
+
+## Dependency-controlled workflow
+
+`codeform/workflows.py` coordinates a versioned analysis DAG. It pins the
+snapshot, documented specification manifest, objective, role prompts, and
+dependency input hashes. Ready deterministic nodes run in a two-worker pool.
+External roles and human gates remain explicit waiting states.
+
+Artifacts and ordered events are immutable. Reviews name the exact artifact
+and its hash. Evidence validation resolves real checker records; synthesis
+preserves unresolved claims instead of treating agent agreement as proof.
+Explicit replacement runs preserve and supersede parent history.
+The UI removes stale review controls on snapshot switches and pins submissions
+to the displayed run/artifact. See [workflow-dag.md](workflow-dag.md).
 
 ## Formal boundary
 

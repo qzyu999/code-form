@@ -39,6 +39,12 @@ reviews. A Python client and CLI let external agents work through the service.
 No model is automatically launched; general proof generation and new checked
 contract semantics remain future capabilities.
 
+The [DAG controller](docs/workflow-dag.md), tracked in
+[issue #6](https://github.com/qzyu999/code-form/issues/6), now coordinates
+read-only built-ins, external role submissions, exact human gates, evidence
+validation, and synthesis. Automatic model execution and isolated source
+repair remain outside this first controller.
+
 ## Phase 0 — Define the model
 
 - [x] Choose the first language and target repository type: local Python repositories.
